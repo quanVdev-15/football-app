@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(node:*)",
+      "Bash(ipconfig)",
+      "Bash(firebase --version)",
+      "Bash(git --version)",
+      "Bash(gh --version)"
+    ]
+  }
+}

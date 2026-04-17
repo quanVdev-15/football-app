@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng Xếp Hạng — Bóng Đá Thứ 7</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* ── Hero ── */
+    .lb-hero {
+      background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 50%, #1b4332 100%);
+      border-radius: 20px;
+      padding: 24px 20px 20px;
+      margin-bottom: 20px;
+      color: #fff;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(27,67,50,.45);
+    }
+    .lb-hero-title {
+      font-size: .68rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: .7;
+      margin-bottom: 16px;
+    }
+    .lb-hero-stats {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+    }
+    .lb-hero-stat {
+      flex: 1;
+      position: relative;
+    }
+    .lb-hero-stat + .lb-hero-stat::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 20%; height: 60%;
+      width: 1px;
+      background: rgba(255,255,255,.2);
+    }
+    .lb-hero-num {
+      font-size: 2.2rem;
+      font-weight: 900;
+      line-height: 1;
+      color: #b7e4c7;
+    }
+    .lb-hero-label {
+      font-size: .72rem;
+      opacity: .75;
+      margin-top: 4px;
+    }
+
+    /* ── Pill tabs ── */
+    .lb-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 0 0 10px;
+      margin-bottom: 16px;
+      scrollbar-width: none;
+    }
+    .lb-tabs::-webkit-scrollbar { display: none; }
+    .lb-tab {
+      flex-shrink: 0;
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      color: var(--text-muted);
+      font-size: .83rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .18s;
+      white-space: nowrap;
+    }
+    .lb-tab.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(27,67,50,.35);
+    }
+
+    /* ── Section label ── */
+    .lb-section-label {
+      font-size: .7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin: 0 0 12px 2px;
+      font-weight: 700;
+    }
+
+    /* ── Podium (top 3) ── */
+    .lb-podium {
+      display: grid;
+      grid-template-columns: 1fr 1.08fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+      align-items: end;
+    }
+    .podium-card {
+      border-radius: 16px;
+      padding: 16px 10px 14px;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 4px 18px rgba(0,0,0,.12);
+    }
+    .podium-card.gold {
+      background: linear-gradient(160deg, #fffbe6 0%, #fef08a 100%);
+      border: 2px solid #f59e0b;
+    }
+    .podium-card.silver {
+      background: linear-gradient(160deg, #f3f4f6 0%, #e5e7eb 100%);
+      border: 2px solid #9ca3af;
+    }
+    .podium-card.bronze {
+      background: linear-gradient(160deg, #fdf3eb 0%, #fed7aa 100%);
+      border: 2px solid #d97706;
+    }
+    .podium-medal {
+      font-size: 1.6rem;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .podium-avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: .95rem;
+      margin: 0 auto 8px;
+      color: #fff;
+    }
+    .podium-card.gold   .podium-avatar { background: #f59e0b; }
+    .podium-card.silver .podium-avatar { background: #6b7280; }
+    .podium-card.bronze .podium-avatar { background: #d97706; }
+    .podium-name {
+      font-size: .8rem;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .podium-stat {
+      font-size: 1rem;
+      font-weight: 900;
+      color: #111;
+    }
+    .podium-sub {
+      font-size: .68rem;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    .podium-stand {
+      height: 8px;
+      border-radius: 0 0 8px 8px;
+      margin: 10px -10px -14px;
+    }
+    .podium-card.gold   .podium-stand { background: #f59e0b; height: 10px; }
+    .podium-card.silver .podium-stand { background: #9ca3af; height: 6px; }
+    .podium-card.bronze .podium-stand { background: #d97706; height: 4px; }
+
+    /* ── Rank list (4th+) ── */
+    .lb-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .lb-list-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--card);
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.07);
+      border: 1px solid var(--border);
+    }
+    .lb-list-rank {
+      min-width: 28px;
+      text-align: center;
+      font-size: .88rem;
+      font-weight: 800;
+      color: var(--text-muted);
+    }
+    .lb-list-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: .82rem;
+      flex-shrink: 0;
+    }
+    .lb-list-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .lb-list-name {
+      font-size: .9rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lb-list-sub {
+      font-size: .72rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+    .lb-list-right {
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .lb-list-stat {
+      font-size: 1rem;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    /* ── Win-rate progress bar ── */
+    .wr-bar-wrap {
+      height: 4px;
+      background: var(--border);
+      border-radius: 999px;
+      margin-top: 4px;
+      overflow: hidden;
+    }
+    .wr-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--primary);
+      transition: width .4s ease;
+    }
+
+    /* ── Empty ── */
+    .lb-empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-muted);
+      font-size: .88rem;
+    }
+    .lb-empty-state .ei { font-size: 2rem; margin-bottom: 8px; }
+
+    /* ── Qualify note ── */
+    .qualify-note {
+      font-size: .75rem;
+      color: var(--text-muted);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🏆 Bảng Xếp Hạng</h1>
+  <div class="header-right">
+    <a href="/history.html" class="admin-link">📋 Lịch sử</a>
+    <a href="/" class="admin-link">← Trang chính</a>
+  </div>
+</header>
+
+<main class="container">
+
+  <div id="loadingState" class="loading">
+    <div class="spinner"></div>
+    <span>Đang tải...</span>
+  </div>
+
+  <div id="content" style="display:none">
+
+    <!-- Hero summary -->
+    <div class="lb-hero">
+      <div class="lb-hero-title">Thống kê tích lũy</div>
+      <div class="lb-hero-stats">
+        <div class="lb-hero-stat">
+          <div class="lb-hero-num" id="statTotalPlayers">—</div>
+          <div class="lb-hero-label">Cầu thủ</div>
+        </div>
+        <div class="lb-hero-stat">
+          <div class="lb-hero-num" id="statTotalSessions">—</div>
+          <div class="lb-hero-label">Buổi đã tính</div>
+        </div>
+        <div class="lb-hero-stat">
+          <div class="lb-hero-num" id="statTotalMatches">—</div>
+          <div class="lb-hero-label">Trận đã đá</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pill tabs -->
+    <div class="lb-tabs">
+      <button class="lb-tab active" id="tab-attendance" onclick="switchTab('attendance')">📅 Buổi đá</button>
+      <button class="lb-tab"        id="tab-winrate"    onclick="switchTab('winrate')">📈 Tỉ lệ thắng</button>
+      <button class="lb-tab"        id="tab-streak"     onclick="switchTab('streak')">🔥 Streak</button>
+      <button class="lb-tab"        id="tab-captain"    onclick="switchTab('captain')">👑 Captain</button>
+    </div>
+
+    <div id="tab-content"></div>
+
+  </div>
+
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script src="/js/utils.js"></script>
+<script>
+
+let allPlayers = [];
+let activeTab  = 'attendance';
+
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const snap = await db.collection('players').orderBy('name').get();
+    allPlayers = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(p => p.stats?.sessionsPlayed > 0);
+
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('content').style.display = '';
+
+    renderSummary();
+    renderTab(activeTab);
+  } catch (e) {
+    console.error(e);
+    document.getElementById('loadingState').innerHTML =
+      '<div style="color:var(--danger);text-align:center;padding:30px">Không thể tải dữ liệu</div>';
+  }
+});
+
+function renderSummary() {
+  document.getElementById('statTotalPlayers').textContent  = allPlayers.length;
+  const maxSessions = Math.max(...allPlayers.map(p => p.stats?.sessionsPlayed || 0), 0);
+  document.getElementById('statTotalSessions').textContent = maxSessions;
+  const totalMatches = Math.max(...allPlayers.map(p => p.stats?.matchesTotal || 0), 0);
+  document.getElementById('statTotalMatches').textContent  = totalMatches;
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  ['attendance','winrate','streak','captain'].forEach(t => {
+    document.getElementById('tab-' + t)?.classList.toggle('active', t === tab);
+  });
+  renderTab(tab);
+}
+
+function renderTab(tab) {
+  const el = document.getElementById('tab-content');
+  if      (tab === 'attendance') renderAttendance(el);
+  else if (tab === 'winrate')    renderWinRate(el);
+  else if (tab === 'streak')     renderStreak(el);
+  else if (tab === 'captain')    renderCaptain(el);
+}
+
+// ── Attendance ────────────────────────────────────────────────────────────────
+function renderAttendance(el) {
+  const sorted = [...allPlayers]
+    .sort((a, b) => (b.stats?.sessionsPlayed || 0) - (a.stats?.sessionsPlayed || 0));
+  el.innerHTML = buildRankingHTML(sorted,
+    p => `${p.stats.sessionsPlayed} buổi`,
+    p => `${p.stats.matchesTotal || 0} trận`
+  );
+}
+
+// ── Win Rate ──────────────────────────────────────────────────────────────────
+function renderWinRate(el) {
+  const qualified = [...allPlayers]
+    .filter(p => (p.stats?.sessionsPlayed || 0) >= 3 && (p.stats?.matchesTotal || 0) > 0)
+    .map(p => ({
+      ...p,
+      winRate: Math.round((p.stats.matchWins / p.stats.matchesTotal) * 100)
+    }))
+    .sort((a, b) => b.winRate - a.winRate || b.stats.sessionsPlayed - a.stats.sessionsPlayed);
+
+  const unqualified = allPlayers.filter(p => (p.stats?.sessionsPlayed || 0) < 3).length;
+  const note = `Cần ít nhất 3 buổi để lọt bảng${unqualified > 0 ? ` · ${unqualified} người chưa đủ điều kiện` : ''}.`;
+
+  el.innerHTML = `<div class="qualify-note">${note}</div>` +
+    buildRankingHTML(qualified,
+      p => `${p.winRate}%`,
+      p => `${p.stats.matchWins}W / ${p.stats.matchesTotal} trận`,
+      p => p.winRate
+    );
+}
+
+// ── Streak ────────────────────────────────────────────────────────────────────
+function renderStreak(el) {
+  const current = [...allPlayers]
+    .filter(p => (p.stats?.currentStreak || 0) > 0)
+    .sort((a, b) => (b.stats?.currentStreak || 0) - (a.stats?.currentStreak || 0)
+      || (b.stats?.bestStreak || 0) - (a.stats?.bestStreak || 0));
+
+  const bestAllTime = [...allPlayers]
+    .filter(p => (p.stats?.bestStreak || 0) > 0)
+    .sort((a, b) => (b.stats?.bestStreak || 0) - (a.stats?.bestStreak || 0))
+    .slice(0, 5);
+
+  el.innerHTML =
+    `<div class="lb-section-label">🔥 Streak hiện tại</div>` +
+    buildRankingHTML(current,
+      p => `${p.stats.currentStreak} tuần`,
+      p => `Best: ${p.stats.bestStreak || p.stats.currentStreak} tuần`
+    ) +
+    `<div class="lb-section-label" style="margin-top:24px">🏅 Streak dài nhất mọi thời</div>` +
+    buildRankingHTML(bestAllTime,
+      p => `${p.stats.bestStreak} tuần`,
+      p => `Hiện: ${p.stats.currentStreak || 0} tuần`
+    );
+}
+
+// ── Captain ───────────────────────────────────────────────────────────────────
+function renderCaptain(el) {
+  const sorted = [...allPlayers]
+    .filter(p => (p.stats?.captainCount || 0) > 0)
+    .sort((a, b) => (b.stats?.captainCount || 0) - (a.stats?.captainCount || 0));
+
+  el.innerHTML = buildRankingHTML(sorted,
+    p => `${p.stats.captainCount} lần`,
+    p => `${p.stats.sessionsPlayed} buổi tham dự`
+  );
+}
+
+// ── Shared ranking builder ────────────────────────────────────────────────────
+function buildRankingHTML(players, statFn, subFn, barPctFn) {
+  if (!players.length) return emptyState();
+
+  const top3   = players.slice(0, 3);
+  const rest   = players.slice(3);
+
+  // Podium order: 2nd (index 1) | 1st (index 0) | 3rd (index 2)
+  const podiumOrder = [
+    top3[1] || null,   // left  = 2nd
+    top3[0] || null,   // center= 1st
+    top3[2] || null,   // right = 3rd
+  ];
+  const podiumClass  = ['silver', 'gold', 'bronze'];
+  const podiumMedal  = ['🥈', '🥇', '🥉'];
+  const podiumRank   = [2, 1, 3];
+
+  let podiumHTML = `<div class="lb-podium">`;
+  podiumOrder.forEach((p, col) => {
+    if (!p) { podiumHTML += `<div></div>`; return; }
+    podiumHTML += `
+    <div class="podium-card ${podiumClass[col]}">
+      <div class="podium-medal">${podiumMedal[col]}</div>
+      <div class="podium-avatar">${initials(p.name)}</div>
+      <div class="podium-name">${esc(p.name)}</div>
+      <div class="podium-stat">${statFn(p)}</div>
+      <div class="podium-sub">${subFn(p)}</div>
+      <div class="podium-stand"></div>
+    </div>`;
+  });
+  podiumHTML += `</div>`;
+
+  // If there are fewer than 2 players, don't render an incomplete podium
+  if (top3.length < 2) {
+    return buildListHTML(players, statFn, subFn, barPctFn);
+  }
+
+  // Rest as list rows
+  let listHTML = '';
+  if (rest.length) {
+    listHTML = `<div class="lb-list">` +
+      rest.map((p, i) => listRow(i + 4, p, statFn, subFn, barPctFn)).join('') +
+    `</div>`;
+  }
+
+  return podiumHTML + listHTML;
+}
+
+function buildListHTML(players, statFn, subFn, barPctFn) {
+  if (!players.length) return emptyState();
+  return `<div class="lb-list">` +
+    players.map((p, i) => listRow(i + 1, p, statFn, subFn, barPctFn)).join('') +
+  `</div>`;
+}
+
+function listRow(rank, p, statFn, subFn, barPctFn) {
+  const bar = barPctFn
+    ? `<div class="wr-bar-wrap"><div class="wr-bar-fill" style="width:${barPctFn(p)}%"></div></div>`
+    : '';
+  return `<div class="lb-list-row">
+    <div class="lb-list-rank">${rank}</div>
+    <div class="lb-list-avatar">${initials(p.name)}</div>
+    <div class="lb-list-info">
+      <div class="lb-list-name">${esc(p.name)}</div>
+      <div class="lb-list-sub">${subFn(p)}</div>
+      ${bar}
+    </div>
+    <div class="lb-list-right">
+      <div class="lb-list-stat">${statFn(p)}</div>
+    </div>
+  </div>`;
+}
+
+function emptyState(msg = 'Chưa có dữ liệu') {
+  return `<div class="lb-empty-state"><div class="ei">📊</div>${msg}</div>`;
+}
+
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+</script>
+</body>
+</html>

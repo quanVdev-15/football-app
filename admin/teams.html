@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draft Đội — Admin</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>⚽ Draft Đội</h1>
+  <div class="header-right">
+    <a href="/admin/" class="admin-link">← Hub</a>
+  </div>
+</header>
+
+<main class="container" id="adminContent" style="display:none">
+
+  <div class="tabs">
+    <button class="tab active" id="tab-captains" onclick="showStep('captains')">1. Đội trưởng</button>
+    <button class="tab" id="tab-draft"    onclick="showStep('draft')">2. Draft</button>
+    <button class="tab" id="tab-result"   onclick="showStep('result')">3. Kết quả</button>
+  </div>
+
+  <!-- ── Step 1: Pick captains ──────────────────────────────────────────── -->
+  <div id="step-captains">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Chọn đội trưởng (2–3 người)</span>
+        <span class="badge badge-blue" id="captainCount">0/3</span>
+      </div>
+      <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">
+        Mỗi người được chọn sẽ dẫn dắt một đội và lần lượt pick cầu thủ.
+      </p>
+      <ul class="player-list" id="captainPool"></ul>
+    </div>
+
+    <div class="card" id="selectedCaptainsCard" style="display:none">
+      <div class="card-title" style="margin-bottom:10px">Đội trưởng đã chọn</div>
+      <div id="selectedCaptains"></div>
+
+      <div class="divider" style="margin:16px 0"></div>
+      <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:10px;text-align:center">
+        Quay số để xác định ai chọn trước
+      </p>
+      <button class="spin-btn" id="spinBtn" onclick="doSpin()">🎰 Quay số!</button>
+      <div id="spinResult"></div>
+    </div>
+
+    <div id="startDraftWrap" style="display:none;margin-top:4px">
+      <button class="btn btn-success btn-block btn-lg" onclick="startDraft()">
+        ▶ Bắt đầu Draft
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Step 2: Live draft oversight ──────────────────────────────────── -->
+  <div id="step-draft" style="display:none">
+
+    <div class="card" style="background:var(--primary);color:#fff;margin-bottom:12px">
+      <div style="text-align:center">
+        <div style="font-size:.73rem;letter-spacing:1.5px;text-transform:uppercase;opacity:.7;margin-bottom:4px">Lượt chọn hiện tại</div>
+        <div id="liveTurnName" style="font-size:1.4rem;font-weight:900">—</div>
+        <div id="liveTurnMeta" style="font-size:.82rem;opacity:.7;margin-top:4px"></div>
+      </div>
+    </div>
+
+    <div id="livePicksList"></div>
+
+    <div style="margin-top:14px">
+      <button class="btn btn-success btn-block btn-lg" onclick="finalizeDraft()">
+        ✅ Kết thúc Draft & Lưu đội
+      </button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="showStep('captains')">
+        ← Sửa đội trưởng
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Step 3: Result ─────────────────────────────────────────────────── -->
+  <div id="step-result" style="display:none">
+    <div id="teamsResult"></div>
+    <button class="btn btn-success btn-block btn-lg" onclick="goToRotation()">
+      ✅ Xác nhận & Chuyển sang Rotation →
+    </button>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="resetDraft()">
+      🔄 Làm lại Draft
+    </button>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/admin-auth.js"></script>
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let session  = null;
+let rsvps    = [];          // [{id, name, position}]
+let captains = [];          // [{id, name}] as selected, before spin
+let spinOrder = null;       // shuffled indices after spin e.g. [2,0,1]
+let unsubDraft = null;
+let draftState = null;
+
+const COLORS = ['red', 'blue', 'green'];
+const COLOR_HEX = { red: '#e53935', blue: '#1565c0', green: '#2e7d32' };
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => requireAuth(initTeams));
+
+async function initTeams() {
+  document.getElementById('adminContent').style.display = '';
+  session = await getActiveSession();
+  if (!session) { showToast('Chưa có buổi đá', 'error'); return; }
+
+  // Load RSVPs (include guests)
+  const snap = await db.collection('sessions').doc(session.id).collection('rsvps').get();
+  rsvps = [];
+  snap.docs.forEach(d => {
+    const data = d.data();
+    if (data.status !== 'in') return;
+    rsvps.push({ id: d.id, name: data.playerName, position: data.position || 'flex' });
+    (data.guests || []).forEach((g, i) => {
+      if (g.name && g.name.trim())
+        rsvps.push({ id: d.id + '_g' + i, name: g.name.trim() + ' (khách)', position: 'flex' });
+    });
+  });
+
+  // Check if a draft is already in progress
+  const draftSnap = await db.collection('sessions').doc(session.id)
+    .collection('state').doc('draft').get();
+
+  if (draftSnap.exists) {
+    draftState = draftSnap.data();
+    if (draftState.status === 'active') {
+      captains = draftState.captains.map(c => ({ id: c.id, name: c.name }));
+      showStep('draft');
+      subscribeDraftLive();
+      return;
+    }
+    if (draftState.status === 'done') {
+      showStep('result');
+      renderResult();
+      return;
+    }
+    // Draft exists but in unknown state — fall through to captain selection
+  }
+
+  renderCaptainPool();
+}
+
+// ─── Step management ──────────────────────────────────────────────────────────
+function showStep(step) {
+  ['captains', 'draft', 'result'].forEach(s => {
+    document.getElementById('step-' + s).style.display = s === step ? '' : 'none';
+    document.getElementById('tab-' + s).classList.toggle('active', s === step);
+  });
+  if (step === 'captains') renderCaptainPool();
+  if (step === 'draft')    subscribeDraftLive();
+  if (step === 'result')   renderResult();
+}
+
+// ─── Step 1: Captain selection ────────────────────────────────────────────────
+function renderCaptainPool() {
+  const pool = document.getElementById('captainPool');
+  const captainIds = new Set(captains.map(c => c.id));
+  const realPlayers = rsvps.filter(p => !p.id.includes('_g'));
+
+  if (realPlayers.length === 0) {
+    pool.innerHTML = `<li class="empty" style="padding:24px 0;text-align:center">
+      <div style="font-size:2rem;margin-bottom:8px">👥</div>
+      <div style="color:var(--text-muted);font-size:.88rem">Chưa có ai đăng ký buổi này.<br>Cầu thủ cần RSVP ở trang chính trước.</div>
+    </li>`;
+    return;
+  }
+
+  // Only real players (not guests) can be captains
+  pool.innerHTML = realPlayers.map(p => {
+    const isCaptain = captainIds.has(p.id);
+    const posInfo = POSITIONS[p.position] || POSITIONS.flex;
+    return `<li class="player-item" style="${isCaptain ? 'background:var(--success-bg);border-color:var(--success);' : ''}cursor:pointer"
+      onclick="toggleCaptain('${p.id}', '${esc(p.name)}')">
+      <div class="player-avatar" style="${isCaptain ? 'background:var(--success);color:#fff' : ''}">${initials(p.name)}</div>
+      <div style="flex:1">
+        <div class="player-name">${esc(p.name)}</div>
+        <div class="player-meta">${posInfo.emoji} ${posInfo.label}</div>
+      </div>
+      ${isCaptain ? `<span class="badge badge-green">Đội trưởng</span>` : ''}
+    </li>`;
+  }).join('');
+
+  document.getElementById('captainCount').textContent = captains.length + '/3';
+
+  const card = document.getElementById('selectedCaptainsCard');
+  if (captains.length >= 2) {
+    card.style.display = '';
+    document.getElementById('selectedCaptains').innerHTML = captains.map((c, i) => `
+      <div class="player-item" style="margin-bottom:6px;background:var(--success-bg);border-color:var(--success)">
+        <div class="player-avatar" style="background:${COLOR_HEX[COLORS[i]]};color:#fff">${initials(c.name)}</div>
+        <div style="flex:1">
+          <div class="player-name">${esc(c.name)}</div>
+          <div class="player-meta">Team ${COLORS[i]} · Đội trưởng ${i + 1}</div>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();removeCaptain('${c.id}')">✕</button>
+      </div>
+    `).join('');
+  } else {
+    card.style.display = 'none';
+  }
+
+  // Show start button only after spin (or if auto-order with 3 captains)
+  document.getElementById('startDraftWrap').style.display =
+    (captains.length >= 2 && spinOrder !== null) ? '' : 'none';
+}
+
+function toggleCaptain(id, name) {
+  if (captains.find(c => c.id === id)) { removeCaptain(id); return; }
+  if (captains.length >= 3) { showToast('Tối đa 3 đội trưởng!', 'error'); return; }
+  captains.push({ id, name });
+  resetSpin();
+  renderCaptainPool();
+}
+
+function removeCaptain(id) {
+  captains = captains.filter(c => c.id !== id);
+  resetSpin();
+  renderCaptainPool();
+}
+
+function resetSpin() {
+  spinOrder = null;
+  document.getElementById('spinResult').innerHTML = '';
+  document.getElementById('startDraftWrap').style.display = 'none';
+  const btn = document.getElementById('spinBtn');
+  if (btn) btn.disabled = false;
+}
+
+function doSpin() {
+  if (captains.length < 2) { showToast('Chọn ít nhất 2 đội trưởng!', 'error'); return; }
+  const btn = document.getElementById('spinBtn');
+  const resultEl = document.getElementById('spinResult');
+  btn.disabled = true;
+
+  let count = 0;
+  const maxFlash = 22;
+  const timer = setInterval(() => {
+    const ri = Math.floor(Math.random() * captains.length);
+    resultEl.innerHTML = `<div style="text-align:center;padding:14px;font-size:1.3rem;font-weight:900;color:var(--primary)">${captains[ri].name}</div>`;
+    count++;
+    if (count >= maxFlash) {
+      clearInterval(timer);
+      const firstIdx = Math.floor(Math.random() * captains.length);
+      // spinOrder: firstIdx picks first, then rest in original order
+      spinOrder = [firstIdx, ...Array.from({ length: captains.length }, (_, i) => i).filter(i => i !== firstIdx)];
+      const orderStr = spinOrder.map(i => captains[i].name).join(' → ');
+      resultEl.innerHTML = `<div class="spin-result">
+        🎉 ${esc(captains[firstIdx].name)} chọn trước!
+        <div style="font-size:.82rem;font-weight:600;color:var(--text-muted);margin-top:6px">Thứ tự: ${esc(orderStr)}</div>
+      </div>`;
+      btn.disabled = false;
+      document.getElementById('startDraftWrap').style.display = '';
+    }
+  }, 80);
+}
+
+// ─── Start draft ──────────────────────────────────────────────────────────────
+async function startDraft() {
+  if (captains.length < 2) { showToast('Chọn ít nhất 2 đội trưởng!', 'error'); return; }
+  if (!spinOrder) { showToast('Hãy quay số trước!', 'error'); return; }
+
+  const orderedCaptains = spinOrder.map(i => captains[i]);
+
+  const draftDoc = {
+    status: 'active',
+    captains: orderedCaptains.map((c, i) => ({ id: c.id, name: c.name, color: COLORS[i] })),
+    currentPickIdx: 0,
+    picks: []
+  };
+
+  try {
+    const batch = db.batch();
+    const sessRef = db.collection('sessions').doc(session.id);
+    batch.set(sessRef.collection('state').doc('draft'), draftDoc);
+    batch.update(sessRef, { status: 'draft' });
+    await batch.commit();
+    // System chat message: draft started
+    await db.collection('sessions').doc(session.id).collection('chat').add({
+      type: 'system',
+      message: `🎰 Draft bắt đầu! Thứ tự: ${orderedCaptains.map(c => c.name).join(' → ')}`,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast('Draft đã bắt đầu!', 'success');
+    showStep('draft');
+  } catch (e) {
+    console.error(e);
+    showToast(t('error'), 'error');
+  }
+}
+
+// ─── Step 2: Live draft oversight ─────────────────────────────────────────────
+function subscribeDraftLive() {
+  if (unsubDraft) unsubDraft();
+  unsubDraft = db.collection('sessions').doc(session.id)
+    .collection('state').doc('draft')
+    .onSnapshot(snap => {
+      if (!snap.exists) return;
+      draftState = snap.data();
+      renderLiveDraft();
+    });
+}
+
+let _unpickedPool = []; // used by adminPickPlayer
+
+function renderLiveDraft() {
+  if (!draftState) return;
+  const { captains: dCaptains, currentPickIdx = 0, picks = [] } = draftState;
+
+  const pickedIds = new Set(picks.map(p => p.playerId));
+  const captainIds = new Set(dCaptains.map(c => c.id));
+  const unpicked = rsvps.filter(p => !pickedIds.has(p.id) && !captainIds.has(p.id));
+  _unpickedPool = unpicked; // store for onclick handler
+  const currentCaptain = dCaptains[currentPickIdx % dCaptains.length];
+  const draftDone = unpicked.length === 0;
+
+  document.getElementById('liveTurnName').textContent =
+    draftDone ? '🎉 Draft hoàn tất!' : `${currentCaptain?.name || '—'} đang chọn`;
+  document.getElementById('liveTurnMeta').textContent =
+    `${picks.length} đã chọn · ${unpicked.length} còn lại`;
+
+  // ── Player pool (admin picks on behalf of current captain) ──
+  let poolHtml = '';
+  if (!draftDone) {
+    poolHtml = `<div class="card" style="margin-bottom:12px">
+      <div class="card-header">
+        <span class="card-title">Chọn cho <b>${esc(currentCaptain?.name || '—')}</b></span>
+        <span class="badge badge-yellow">${unpicked.length} còn</span>
+      </div>
+      <ul class="player-list" style="margin:0">
+        ${unpicked.map((p, idx) => {
+          const posInfo = POSITIONS[p.position] || POSITIONS.flex;
+          return `<li class="player-item" style="cursor:pointer" onclick="adminPickPlayer(${idx})">
+            <div class="player-avatar">${initials(p.name)}</div>
+            <div style="flex:1">
+              <div class="player-name">${esc(p.name)}</div>
+              <div class="player-meta">${posInfo.emoji} ${posInfo.label}</div>
+            </div>
+            <button class="btn btn-sm btn-success" onclick="event.stopPropagation();adminPickPlayer(${idx})">Chọn</button>
+          </li>`;
+        }).join('')}
+      </ul>
+    </div>`;
+  }
+
+  // ── Team slots ──
+  const teamPicks = {};
+  dCaptains.forEach((c, i) => {
+    teamPicks[i] = [{ id: c.id, name: c.name, position: rsvps.find(r => r.id === c.id)?.position || 'flex' }];
+  });
+  picks.forEach(p => {
+    if (!teamPicks[p.captainIdx]) teamPicks[p.captainIdx] = [];
+    teamPicks[p.captainIdx].push({ id: p.playerId, name: p.playerName, position: p.position || 'flex' });
+  });
+
+  const teamSlotsHtml = dCaptains.map((c, i) => {
+    const members = teamPicks[i] || [];
+    const isCurrentTurn = i === (currentPickIdx % dCaptains.length) && !draftDone;
+    return `<div class="draft-team-slot" style="${isCurrentTurn ? 'border-color:var(--primary-light);background:var(--success-bg)' : ''}">
+      <div class="draft-team-header">
+        <div class="team-dot team-dot-${c.color}"></div>
+        <span style="flex:1">Team ${esc(c.name)}</span>
+        ${isCurrentTurn ? `<span class="badge badge-green" style="margin-right:6px">▶ Lượt này</span>` : ''}
+        <span class="badge badge-grey">${members.length}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${members.map(m => {
+          const info = POSITIONS[m.position] || POSITIONS.flex;
+          return `<div class="draft-pick-chip">${info.emoji} ${esc(m.name)}</div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('livePicksList').innerHTML = poolHtml + teamSlotsHtml;
+}
+
+async function adminPickPlayer(idx) {
+  const p = _unpickedPool[idx];
+  if (!p || !draftState) return;
+  const { captains: dCaptains, currentPickIdx = 0 } = draftState;
+  const captainIdx = currentPickIdx % dCaptains.length;
+  const pick = { playerId: p.id, playerName: p.name, position: p.position || 'flex', captainIdx };
+  try {
+    const batch = db.batch();
+    const sessRef = db.collection('sessions').doc(session.id);
+    batch.update(sessRef.collection('state').doc('draft'), {
+      picks: firebase.firestore.FieldValue.arrayUnion(pick),
+      currentPickIdx: currentPickIdx + 1
+    });
+    batch.set(sessRef.collection('chat').doc(), {
+      type: 'system',
+      message: `⚽ ${dCaptains[captainIdx].name} chọn ${p.name}`,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await batch.commit();
+    showToast(`✅ ${dCaptains[captainIdx].name} → ${p.name}`, 'success');
+  } catch (e) {
+    console.error(e);
+    showToast(t('error'), 'error');
+  }
+}
+
+// ─── Finalize draft ───────────────────────────────────────────────────────────
+async function finalizeDraft() {
+  if (!draftState) { showToast('Chưa có dữ liệu draft', 'error'); return; }
+  const { captains: dCaptains, picks = [] } = draftState;
+
+  const pickedIds = new Set(picks.map(p => p.playerId));
+  const captainIds = new Set(dCaptains.map(c => c.id));
+
+  // Build team rosters (captain + their picks)
+  const teamMembers = {};
+  dCaptains.forEach((cap, idx) => {
+    teamMembers[idx] = [
+      { id: cap.id, name: cap.name },
+      ...picks.filter(p => p.captainIdx === idx).map(p => ({ id: p.playerId, name: p.playerName }))
+    ];
+  });
+
+  // Auto-distribute unpicked players to smallest team (no floating subs)
+  const unpicked = rsvps.filter(p => !pickedIds.has(p.id) && !captainIds.has(p.id));
+  unpicked.forEach(p => {
+    const smallestIdx = Object.entries(teamMembers)
+      .sort((a, b) => a[1].length - b[1].length)[0][0];
+    teamMembers[smallestIdx].push({ id: p.id, name: p.name });
+  });
+
+  try {
+    const batch = db.batch();
+    const sessRef = db.collection('sessions').doc(session.id);
+
+    // Remove old teams
+    const oldSnap = await sessRef.collection('teams').get();
+    oldSnap.docs.forEach(d => batch.delete(d.ref));
+
+    // Write new teams
+    dCaptains.forEach((cap, idx) => {
+      batch.set(sessRef.collection('teams').doc(), {
+        captainId: cap.id,
+        captainName: cap.name,
+        name: 'Team ' + cap.name,
+        color: cap.color,
+        players: teamMembers[idx],
+        wins: 0,
+        losses: 0,
+        consecutiveWins: 0,
+        tradeUsed: false
+      });
+    });
+
+    // Mark draft done, advance session
+    batch.update(sessRef.collection('state').doc('draft'), { status: 'done' });
+    batch.update(sessRef, { status: 'teams' });
+
+    await batch.commit();
+    const autoFilled = unpicked.length;
+    await db.collection('sessions').doc(session.id).collection('chat').add({
+      type: 'system',
+      message: `🏁 Draft hoàn tất! ${dCaptains.length} đội đã sẵn sàng.${autoFilled ? ` (${autoFilled} người được phân đội tự động)` : ''}`,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast('Đội đã được lưu!', 'success');
+    showStep('result');
+  } catch (e) {
+    console.error(e);
+    showToast(t('error'), 'error');
+  }
+}
+
+// ─── Step 3: Result ───────────────────────────────────────────────────────────
+async function renderResult() {
+  const snap = await db.collection('sessions').doc(session.id).collection('teams').get();
+  const teams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  document.getElementById('teamsResult').innerHTML = teams.map(team => {
+    const players = team.players || [];
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div class="team-dot team-dot-${team.color}"></div>
+        <div style="font-weight:800">${esc(team.name)}</div>
+        <span class="badge badge-grey">${players.length} người</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${players.map(p => `<div class="draft-pick-chip">${esc(p.name)}${p.id === team.captainId ? ' 🏆' : ''}</div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function goToRotation() {
+  location.href = '/admin/rotation.html';
+}
+
+async function resetDraft() {
+  if (!confirm('Xoá draft hiện tại và chọn lại đội trưởng?')) return;
+  try {
+    await db.collection('sessions').doc(session.id)
+      .collection('state').doc('draft').delete();
+    captains = [];
+    spinOrder = null;
+    draftState = null;
+    if (unsubDraft) { unsubDraft(); unsubDraft = null; }
+    showStep('captains');
+    showToast('Đã reset draft', 'success');
+  } catch (e) {
+    showToast(t('error'), 'error');
+  }
+}
+
+function esc(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>

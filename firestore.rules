@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Public read: players list (for RSVP dropdown)
+    match /players/{playerId} {
+      allow read: if true;
+      allow write: if true; // Players can self-add; tighten if needed
+    }
+
+    // Debt tracking (admin writes, public read)
+    match /debts/{debtId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Public read for config/app (to get currentSessionId)
+    // Write restricted — only trusted clients (no server-side auth here)
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if true; // Tighten with Firebase Auth if you add login later
+    }
+
+    // Sessions: public read, write allowed for RSVP
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if true;
+
+      // RSVPs: anyone can create/update their own RSVP
+      match /rsvps/{rsvpId} {
+        allow read: if true;
+        allow write: if true;
+      }
+
+      // Teams, payments, state: restricted to admin in production
+      // For now open for simplicity — tighten with Firebase Auth later
+      match /teams/{teamId} {
+        allow read: if true;
+        allow write: if true;
+      }
+      match /payments/{paymentId} {
+        allow read: if true;
+        allow write: if true;
+      }
+      match /state/{stateDoc} {
+        allow read: if true;
+        allow write: if true;
+      }
+      match /chat/{msgId} {
+        allow read: if true;
+        allow write: if true;
+      }
+      match /reactions/{reactionId} {
+        allow read: if true;
+        allow write: if true;
+      }
+      match /formations/{teamId} {
+        allow read: if true;
+        allow write: if true;
+      }
+      match /trades/{tradeId} {
+        allow read: if true;
+        allow write: if true;
+      }
+    }
+  }
+}

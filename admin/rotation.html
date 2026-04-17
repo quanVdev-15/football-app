@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lịch Trận — Admin</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🔄 Lịch trận</h1>
+  <div class="header-right">
+    <a href="/admin/" class="admin-link">← Hub</a>
+  </div>
+</header>
+
+<main class="container" id="adminContent" style="display:none">
+
+  <!-- Not ready state -->
+  <div id="noTeamsMsg" style="display:none" class="empty">
+    <div class="empty-icon">👥</div>
+    <p>Chưa có đội bóng. <a href="/admin/teams.html" style="color:var(--primary);font-weight:700">Tạo đội trước</a>.</p>
+  </div>
+
+  <!-- Setup rotation (before first match) -->
+  <div id="setupSection" style="display:none">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Thiết lập trận đấu</span>
+      </div>
+      <div id="teamSummary" style="margin-bottom:14px"></div>
+      <div class="form-group">
+        <label class="form-label">Format</label>
+        <div class="form-select-wrap">
+          <select class="form-select" id="formatSelect">
+            <option value="3team">3 đội — King of Court (mặc định)</option>
+            <option value="4team">4 đội — Round Robin</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">⏱ Thời gian mỗi trận</label>
+        <div class="form-select-wrap">
+          <select class="form-select" id="durationSelect">
+            <option value="60">1 phút (test)</option>
+            <option value="300">5 phút</option>
+            <option value="480">8 phút</option>
+            <option value="600">10 phút</option>
+            <option value="720">12 phút</option>
+            <option value="900" selected>15 phút (mặc định)</option>
+            <option value="1200">20 phút</option>
+            <option value="1500">25 phút</option>
+          </select>
+        </div>
+      </div>
+      <div id="teamOrderSection">
+        <label class="form-label">Thứ tự đá đầu tiên</label>
+        <div class="form-hint" style="margin-bottom:8px">Đội A vs Đội B, Đội C nghỉ</div>
+        <div id="firstMatchPicker" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <button class="btn btn-success btn-block btn-lg" style="margin-top:16px" onclick="startRotation()">
+        ▶ Bắt đầu thi đấu
+      </button>
+    </div>
+  </div>
+
+  <!-- Active rotation -->
+  <div id="rotationSection" style="display:none">
+
+    <!-- Stale data warning -->
+    <div id="staleWarning" style="display:none;background:#fff3e0;border:1.5px solid #e65100;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-weight:800;color:#e65100;margin-bottom:6px">⚠️ Dữ liệu cũ / Stale data</div>
+      <div style="font-size:.85rem;color:#5d4037;margin-bottom:12px">Trạng thái rotation không khớp với đội hiện tại. Hãy đặt lại để bắt đầu lại.</div>
+      <button class="btn btn-danger btn-block" onclick="resetRotation()">🔄 Đặt lại rotation</button>
+    </div>
+
+    <!-- Current match card -->
+    <div class="match-ctrl" id="currentMatchCard">
+      <div style="font-size:.68rem;letter-spacing:2px;text-transform:uppercase;opacity:.6;margin-bottom:10px">ĐANG ĐÁ</div>
+      <div class="court-teams" style="justify-content:center;gap:12px">
+        <div class="court-team" id="ctrlTeamA" style="font-size:1.1rem;padding:10px">—</div>
+        <div class="court-vs">VS</div>
+        <div class="court-team" id="ctrlTeamB" style="font-size:1.1rem;padding:10px">—</div>
+      </div>
+      <div class="board-timer" id="ctrlTimer" style="font-size:2rem;color:#95d5b2">15:00</div>
+    </div>
+
+    <!-- Match controls -->
+    <div class="card" id="matchControls">
+      <div class="card-header">
+        <span class="card-title" id="matchStatusLabel">Trận chưa bắt đầu</span>
+      </div>
+      <div id="preMatchControls">
+        <button class="btn btn-success btn-block btn-lg" onclick="startMatch()">▶ Bắt đầu trận</button>
+      </div>
+      <div id="midMatchControls" style="display:none">
+        <div class="form-label" style="margin-bottom:8px">Kết quả trận:</div>
+        <div id="winnerBtns" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+
+    <!-- Next match preview -->
+    <div class="card" id="nextMatchPreview">
+      <div class="card-header">
+        <span class="card-title">Trận tiếp theo</span>
+        <button class="btn btn-sm btn-ghost" onclick="openOverride()">✏️ Thay đổi</button>
+      </div>
+      <div id="nextMatchInfo" style="color:var(--text-muted);font-size:.9rem"></div>
+    </div>
+
+    <!-- Subs rotation info -->
+    <div class="card" id="subsCard" style="display:none">
+      <div class="card-title" style="margin-bottom:8px">Cầu thủ dự bị</div>
+      <div id="subsInfo" style="font-size:.85rem;color:var(--text-muted)"></div>
+    </div>
+
+    <!-- Match history -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:10px">Lịch sử trận (<span id="historyCount">0</span>)</div>
+      <div id="historyList"></div>
+    </div>
+
+    <!-- Reset -->
+    <div style="margin-top:8px">
+      <button class="btn btn-ghost btn-block btn-sm" style="color:var(--danger);border-color:var(--danger);opacity:.7" onclick="confirmResetRotation()">🔄 Đặt lại rotation từ đầu</button>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- Override modal -->
+<div class="modal-overlay" id="overrideModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 class="modal-title">Sắp xếp lại trận tiếp theo</h2>
+    <div class="form-group">
+      <label class="form-label">Đội A</label>
+      <div class="form-select-wrap">
+        <select class="form-select" id="overrideA"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Đội B</label>
+      <div class="form-select-wrap">
+        <select class="form-select" id="overrideB"></select>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block btn-lg" onclick="applyOverride()">Xác nhận</button>
+    <button class="btn btn-ghost btn-block" onclick="closeOverride()" style="margin-top:8px">Huỷ</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/admin-auth.js"></script>
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let session = null;
+let teams = [];      // sorted array of team docs
+let rotDoc = null;   // rotation state doc
+let timerInterval = null;
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => requireAuth(initRotation));
+
+async function initRotation() {
+  document.getElementById('adminContent').style.display = '';
+  session = await getActiveSession();
+  if (!session) return;
+
+  // Load teams
+  const tSnap = await db.collection('sessions').doc(session.id).collection('teams').get();
+  teams = tSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  if (!teams.length) {
+    document.getElementById('noTeamsMsg').style.display = '';
+    return;
+  }
+
+  // Subscribe to rotation state
+  db.collection('sessions').doc(session.id).collection('state').doc('rotation')
+    .onSnapshot(snap => {
+      rotDoc = snap.exists ? snap.data() : null;
+      renderRotation();
+    });
+}
+
+function renderRotation() {
+  if (!rotDoc) {
+    // Show setup
+    document.getElementById('setupSection').style.display = '';
+    document.getElementById('rotationSection').style.display = 'none';
+    renderSetup();
+  } else {
+    document.getElementById('setupSection').style.display = 'none';
+    document.getElementById('rotationSection').style.display = '';
+    renderActive();
+  }
+}
+
+// ─── Setup ────────────────────────────────────────────────────────────────────
+function renderSetup() {
+  document.getElementById('teamSummary').innerHTML = teams.map(t =>
+    `<div class="player-item" style="margin-bottom:6px">
+      <div class="team-dot ${teamDotClass(t.color)}" style="width:12px;height:12px;border-radius:50%"></div>
+      <span class="player-name">${esc(t.name)}</span>
+      <span class="badge badge-grey">${(t.players||[]).length} + ${(t.subs||[]).length} sub</span>
+    </div>`
+  ).join('');
+
+  // Disable 4-team option if fewer than 4 teams exist
+  const opt4 = document.querySelector('#formatSelect option[value="4team"]');
+  if (opt4) {
+    opt4.disabled = teams.length < 4;
+    if (teams.length < 4 && document.getElementById('formatSelect').value === '4team') {
+      document.getElementById('formatSelect').value = '3team';
+    }
+  }
+
+  renderFirstMatchPicker();
+
+  const sel = document.getElementById('formatSelect');
+  sel.removeEventListener('change', renderFirstMatchPicker);
+  sel.addEventListener('change', renderFirstMatchPicker);
+}
+
+function renderFirstMatchPicker() {
+  const format = document.getElementById('formatSelect').value;
+  const picker = document.getElementById('firstMatchPicker');
+  document.getElementById('teamOrderSection').style.display = format === '3team' ? '' : 'none';
+
+  if (format !== '3team') return;
+
+  picker.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="form-select-wrap" style="flex:1">
+        <select class="form-select" id="firstA">
+          ${teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}
+        </select>
+      </div>
+      <span style="font-weight:800;color:var(--text-muted)">VS</span>
+      <div class="form-select-wrap" style="flex:1">
+        <select class="form-select" id="firstB">
+          ${teams.map((t,i) => `<option value="${t.id}" ${i===1?'selected':''}>${esc(t.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="font-size:.82rem;color:var(--text-muted)">Đội còn lại sẽ nghỉ trận đầu</div>
+  `;
+}
+
+async function startRotation() {
+  const format = document.getElementById('formatSelect').value;
+  const matchDurationSecs = parseInt(document.getElementById('durationSelect').value) || 900;
+  const sessRef = db.collection('sessions').doc(session.id);
+
+  let initData = {
+    format,
+    matchDurationSecs,
+    matchHistory: [],
+    status: 'idle',
+    currentMatchStart: null
+  };
+
+  if (format === '3team') {
+    const firstAId = document.getElementById('firstA').value;
+    const firstBId = document.getElementById('firstB').value;
+    if (firstAId === firstBId) { showToast('Chọn 2 đội khác nhau!', 'error'); return; }
+    const restingId = teams.find(t => t.id !== firstAId && t.id !== firstBId)?.id;
+    initData = {
+      ...initData,
+      onCourtA: firstAId,
+      onCourtB: firstBId,
+      resting: restingId,
+      consecutiveWins: {},
+    };
+  } else {
+    // 4-team round robin schedule: 6 matches
+    const [t0, t1, t2, t3] = teams;
+    const schedule = [
+      { teamA: t0.id, teamB: t1.id, round: 1, winnerId: null },
+      { teamA: t2.id, teamB: t3.id, round: 1, winnerId: null },
+      { teamA: t0.id, teamB: t2.id, round: 2, winnerId: null },
+      { teamA: t1.id, teamB: t3.id, round: 2, winnerId: null },
+      { teamA: t0.id, teamB: t3.id, round: 3, winnerId: null },
+      { teamA: t1.id, teamB: t2.id, round: 3, winnerId: null },
+    ];
+    initData = {
+      ...initData,
+      onCourtA: schedule[0].teamA,
+      onCourtB: schedule[0].teamB,
+      schedule,
+      currentMatchIndex: 0,
+    };
+  }
+
+  await sessRef.collection('state').doc('rotation').set(initData);
+  await sessRef.update({ status: 'playing' });
+  showToast('Bắt đầu thi đấu!', 'success');
+}
+
+// ─── Active rotation ──────────────────────────────────────────────────────────
+function renderActive() {
+  if (!rotDoc) return;
+  const { format, onCourtA, onCourtB, resting, status, matchHistory, currentMatchStart, schedule, currentMatchIndex } = rotDoc;
+
+  const tA = teamById(onCourtA);
+  const tB = teamById(onCourtB);
+
+  // Detect stale / orphaned rotation (team IDs don't match loaded teams)
+  const isStale = !tA || !tB;
+  document.getElementById('staleWarning').style.display = isStale ? '' : 'none';
+  document.getElementById('currentMatchCard').style.opacity = isStale ? '.4' : '';
+  document.getElementById('matchControls').style.pointerEvents = isStale ? 'none' : '';
+  const tRest = resting ? teamById(resting) : null;
+
+  // Team cards
+  if (tA) {
+    document.getElementById('ctrlTeamA').textContent = tA.name;
+    document.getElementById('ctrlTeamA').className = 'court-team ' + colorClass(tA.color);
+  }
+  if (tB) {
+    document.getElementById('ctrlTeamB').textContent = tB.name;
+    document.getElementById('ctrlTeamB').className = 'court-team ' + colorClass(tB.color);
+  }
+
+  // Timer
+  clearInterval(timerInterval);
+  const durSecs = rotDoc?.matchDurationSecs || 900;
+  if (status === 'playing' && currentMatchStart) {
+    const start = currentMatchStart.toDate ? currentMatchStart.toDate() : new Date(currentMatchStart);
+    timerInterval = setInterval(() => updateCtrlTimer(start, durSecs), 500);
+    updateCtrlTimer(start, durSecs);
+  } else {
+    // Show configured duration while idle
+    const el = document.getElementById('ctrlTimer');
+    el.textContent = pad2(Math.floor(durSecs / 60)) + ':' + pad2(durSecs % 60);
+    el.style.color = '#95d5b2';
+  }
+
+  // Match controls
+  const isPlaying = status === 'playing';
+  document.getElementById('matchStatusLabel').textContent = isPlaying ? '⏱ Đang diễn ra' : '⏸ Chờ bắt đầu';
+  document.getElementById('preMatchControls').style.display = isPlaying ? 'none' : '';
+  document.getElementById('midMatchControls').style.display = isPlaying ? '' : 'none';
+
+  if (isPlaying) {
+    const COLOR_HEX = { red: '#e53935', blue: '#1565c0', green: '#2e7d32', yellow: '#f9a825' };
+    const colA = COLOR_HEX[tA?.color] || '#1565c0';
+    const colB = COLOR_HEX[tB?.color] || '#2e7d32';
+    document.getElementById('winnerBtns').innerHTML = `
+      <button class="btn btn-block btn-lg" style="background:${colA};color:#fff" onclick="endMatch('${onCourtA}')">
+        🏆 ${esc(tA?.name || '?')} thắng
+      </button>
+      <button class="btn btn-block btn-lg" style="background:${colB};color:#fff" onclick="endMatch('${onCourtB}')">
+        🏆 ${esc(tB?.name || '?')} thắng
+      </button>
+      <button class="btn btn-ghost btn-block" onclick="endMatch(null)">🤝 Hoà (phân định bằng cách khác)</button>
+    `;
+  }
+
+  // Next match preview
+  renderNextMatch();
+
+  // Subs
+  const allSubs = teams.flatMap(t => t.subs || []);
+  if (allSubs.length) {
+    document.getElementById('subsCard').style.display = '';
+    const history = matchHistory || [];
+    const matchNum = history.length + 1;
+    const subIdx = (matchNum - 1) % (format === '3team' ? 3 : 4);
+    const subTeam = teams[subIdx % teams.length];
+    document.getElementById('subsInfo').innerHTML = `
+      Trận ${matchNum}: Dự bị vào đội <b>${esc(subTeam?.name || '?')}</b><br>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
+        ${allSubs.map(s => `<span class="player-pill">${esc(s.name)}</span>`).join('')}
+      </div>
+    `;
+  }
+
+  // History
+  renderHistory(matchHistory || []);
+}
+
+function renderNextMatch() {
+  if (!rotDoc) return;
+  const { format, onCourtA, onCourtB, resting, consecutiveWins, schedule, currentMatchIndex } = rotDoc;
+  const el = document.getElementById('nextMatchInfo');
+
+  if (format === '3team') {
+    // Can't know next until this match ends — show resting team
+    const tRest = resting ? teamById(resting) : null;
+    const cwA = (consecutiveWins || {})[onCourtA] || 0;
+    const cwB = (consecutiveWins || {})[onCourtB] || 0;
+    el.innerHTML = `
+      <div style="margin-bottom:6px">Đội nghỉ sẵn sàng lên: <b>${esc(tRest?.name || '?')}</b></div>
+      <div style="font-size:.8rem">
+        ${renderConsecutive(onCourtA, cwA)} ${renderConsecutive(onCourtB, cwB)}
+      </div>
+    `;
+  } else if (schedule) {
+    const nextIdx = (currentMatchIndex || 0) + 1;
+    if (nextIdx < schedule.length) {
+      const next = schedule[nextIdx];
+      const tA = teamById(next.teamA);
+      const tB = teamById(next.teamB);
+      el.textContent = `Vòng ${next.round}: ${tA?.name || '?'} vs ${tB?.name || '?'}`;
+    } else {
+      el.textContent = 'Đây là trận cuối!';
+    }
+  }
+}
+
+function renderConsecutive(teamId, wins) {
+  const team = teamById(teamId);
+  if (!team) return '';
+  const isMax = wins >= 1; // after 1 win they're at risk; after 2 they must rest
+  return `<span style="color:${wins >= 2 ? 'var(--danger)' : wins === 1 ? 'var(--warning)' : 'var(--text-muted)'};margin-right:8px">
+    ${esc(team.name)}: ${wins} ${wins >= 2 ? '🔴 Phải nghỉ!' : wins === 1 ? '⚠️' : ''}
+  </span>`;
+}
+
+async function startMatch() {
+  if (!rotDoc) return;
+  const tA = teamById(rotDoc.onCourtA);
+  const tB = teamById(rotDoc.onCourtB);
+  if (!tA || !tB) { showToast('Dữ liệu đội không hợp lệ — hãy đặt lại rotation!', 'error'); return; }
+  await db.collection('sessions').doc(session.id).collection('state').doc('rotation').update({
+    status: 'playing',
+    currentMatchStart: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function endMatch(winnerId) {
+  if (!rotDoc) return;
+  const { format, onCourtA, onCourtB, resting, consecutiveWins, matchHistory, schedule, currentMatchIndex } = rotDoc;
+
+  const history = matchHistory || [];
+  history.push({
+    teamA: onCourtA,
+    teamB: onCourtB,
+    winnerId,
+    time: new Date().toISOString()
+  });
+
+  let update = {
+    matchHistory: history,
+    status: 'idle',
+    currentMatchStart: null
+  };
+
+  if (format === '3team') {
+    update = { ...update, ...calcNextMatch3(onCourtA, onCourtB, resting, winnerId, consecutiveWins || {}) };
+  } else {
+    // 4-team: update schedule and advance
+    const updatedSchedule = [...schedule];
+    updatedSchedule[currentMatchIndex || 0] = {
+      ...updatedSchedule[currentMatchIndex || 0],
+      winnerId
+    };
+    const nextIdx = (currentMatchIndex || 0) + 1;
+    update.schedule = updatedSchedule;
+    update.currentMatchIndex = nextIdx;
+    if (nextIdx < updatedSchedule.length) {
+      update.onCourtA = updatedSchedule[nextIdx].teamA;
+      update.onCourtB = updatedSchedule[nextIdx].teamB;
+    }
+  }
+
+  // Update team win/loss counts
+  if (winnerId) {
+    const loserId = winnerId === onCourtA ? onCourtB : onCourtA;
+    const winnerRef = db.collection('sessions').doc(session.id).collection('teams').doc(winnerId);
+    const loserRef = db.collection('sessions').doc(session.id).collection('teams').doc(loserId);
+    await winnerRef.update({ wins: firebase.firestore.FieldValue.increment(1) });
+    await loserRef.update({ losses: firebase.firestore.FieldValue.increment(1) });
+    // Update local teams array
+    const w = teams.find(t => t.id === winnerId); if (w) w.wins = (w.wins||0)+1;
+    const l = teams.find(t => t.id === loserId); if (l) l.losses = (l.losses||0)+1;
+  }
+
+  await db.collection('sessions').doc(session.id).collection('state').doc('rotation').update(update);
+}
+
+function calcNextMatch3(teamA, teamB, resting, winnerId, consecutiveWins) {
+  const loserId = winnerId === teamA ? teamB : winnerId === teamB ? teamA : null;
+
+  if (!winnerId) {
+    // Draw: rotate normally (loser = teamB arbitrarily, winner = teamA stays)
+    // Simplified: keep both teams, resting comes on next
+    return {
+      onCourtA: teamA,
+      onCourtB: resting,
+      resting: teamB,
+      consecutiveWins: { ...consecutiveWins, [teamA]: 0, [teamB]: 0 }
+    };
+  }
+
+  const winnerStreak = (consecutiveWins[winnerId] || 0) + 1;
+
+  if (winnerStreak >= 2) {
+    // Winner MUST rest — loser stays, resting comes on
+    return {
+      onCourtA: loserId,
+      onCourtB: resting,
+      resting: winnerId,
+      consecutiveWins: {
+        ...consecutiveWins,
+        [winnerId]: 0,  // reset streak (they're resting)
+        [loserId]: 0,
+      }
+    };
+  } else {
+    // Normal king of court: winner stays, loser rests
+    return {
+      onCourtA: winnerId,
+      onCourtB: resting,
+      resting: loserId,
+      consecutiveWins: {
+        ...consecutiveWins,
+        [winnerId]: winnerStreak,
+        [loserId]: 0,
+      }
+    };
+  }
+}
+
+function renderHistory(history) {
+  document.getElementById('historyCount').textContent = history.length;
+  const el = document.getElementById('historyList');
+  if (!history.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem">Chưa có trận nào</div>';
+    return;
+  }
+  el.innerHTML = history.slice().reverse().map((m, ri) => {
+    const tA = teamById(m.teamA);
+    const tB = teamById(m.teamB);
+    const winner = m.winnerId ? teamById(m.winnerId) : null;
+    const num = history.length - ri;
+    return `<div class="match-history-item">
+      <span class="history-num">#${num}</span>
+      <span class="history-teams">${esc(tA?.name||'?')} vs ${esc(tB?.name||'?')}</span>
+      ${winner ? `<span class="history-winner">🏆 ${esc(winner.name)}</span>` : '<span style="font-size:.78rem;color:var(--text-muted)">Hoà</span>'}
+    </div>`;
+  }).join('');
+}
+
+// ─── Timer ────────────────────────────────────────────────────────────────────
+function updateCtrlTimer(start, durSecs) {
+  const elapsed = Math.floor((Date.now() - start.getTime()) / 1000);
+  const rem = (durSecs || rotDoc?.matchDurationSecs || 900) - elapsed;
+  const el = document.getElementById('ctrlTimer');
+  if (rem >= 0) {
+    el.textContent = pad2(Math.floor(rem/60)) + ':' + pad2(rem%60);
+    el.style.color = rem < 60 ? '#ef9a9a' : '#95d5b2';
+  } else {
+    const ov = -rem;
+    el.textContent = '+' + pad2(Math.floor(ov/60)) + ':' + pad2(ov%60);
+    el.style.color = '#ef9a9a';
+  }
+}
+function pad2(n) { return String(n).padStart(2,'0'); }
+
+// ─── Override ─────────────────────────────────────────────────────────────────
+function openOverride() {
+  const selA = document.getElementById('overrideA');
+  const selB = document.getElementById('overrideB');
+  const opts = teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  selA.innerHTML = opts;
+  selB.innerHTML = opts;
+  if (teams[0]) selA.value = teams[0].id;
+  if (teams[1]) selB.value = teams[1].id;
+  document.getElementById('overrideModal').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+function closeOverride() {
+  document.getElementById('overrideModal').classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+async function applyOverride() {
+  const newA = document.getElementById('overrideA').value;
+  const newB = document.getElementById('overrideB').value;
+  if (newA === newB) { showToast('Chọn 2 đội khác nhau!', 'error'); return; }
+  const newResting = teams.find(t => t.id !== newA && t.id !== newB)?.id;
+  await db.collection('sessions').doc(session.id).collection('state').doc('rotation').update({
+    onCourtA: newA,
+    onCourtB: newB,
+    resting: newResting || null,
+    status: 'idle',
+    currentMatchStart: null
+  });
+  closeOverride();
+  showToast('Đã thay đổi lịch!', 'success');
+}
+
+// ─── Reset rotation ───────────────────────────────────────────────────────────
+async function resetRotation() {
+  await db.collection('sessions').doc(session.id).collection('state').doc('rotation').delete();
+  showToast('Đã đặt lại rotation!', 'success');
+}
+
+function confirmResetRotation() {
+  if (confirm('Đặt lại rotation? Toàn bộ lịch sử trận sẽ bị xoá.')) resetRotation();
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function teamById(id) { return teams.find(t => t.id === id); }
+function teamDotClass(color) { return `team-dot-${color}`; }
+function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => {
+    if (e.target === o) { o.classList.remove('active'); document.body.style.overflow = ''; }
+  });
+});
+</script>
+</body>
+</html>

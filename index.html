@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bóng Đá Thứ 7</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1b4332">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>⚽ <span id="headerTitle">Bóng Đá Thứ 7</span></h1>
+  <div class="header-right">
+    <button class="lang-btn" id="langBtn">EN</button>
+    <a href="/leaderboard.html" class="admin-link" style="font-size:.72rem">🏆</a>
+    <a href="/admin/" class="admin-link">Admin</a>
+  </div>
+</header>
+
+<main class="container">
+  <!-- Loading state -->
+  <div id="loadingState" class="loading">
+    <div class="spinner"></div>
+    <span>Đang tải...</span>
+  </div>
+
+  <!-- No session state -->
+  <div id="noSession" style="display:none">
+    <div class="empty">
+      <div class="empty-icon">📅</div>
+      <p id="noSessionMsg">Chưa có buổi đá. Admin hãy tạo buổi mới.</p>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div id="mainContent" style="display:none">
+
+    <!-- Status bar -->
+    <div id="statusBar" class="status-bar open">
+      <span id="statusIcon">🟢</span>
+      <span id="statusText"></span>
+    </div>
+
+    <!-- Session date -->
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div class="card-title" id="dateLabel">Buổi đá</div>
+          <div style="font-size:1rem;font-weight:700;margin-top:2px" id="sessionDate"></div>
+        </div>
+        <div style="font-size:.82rem;color:var(--text-muted);text-align:right" id="cutoffInfo"></div>
+      </div>
+    </div>
+
+    <!-- Player count -->
+    <div class="count-display" id="countDisplay">
+      <div class="count-num" id="countNum">0</div>
+      <div class="count-label" id="countLabel">người đã đăng ký</div>
+    </div>
+
+    <!-- RSVP button -->
+    <button id="rsvpBtn" class="btn btn-cta" onclick="openRsvpModal()">
+      ⚽ Tôi sẽ đến!
+    </button>
+
+    <!-- Payment QR (shown when locked/teams/playing but NOT done) -->
+    <div id="paymentSection" style="display:none" class="card">
+      <div class="card-header">
+        <span class="card-title">💰 Thanh toán</span>
+        <span id="paymentBadge" class="badge badge-yellow"></span>
+      </div>
+      <div id="paymentBody"></div>
+    </div>
+
+    <!-- Post-game payment board (shown when status=done) -->
+    <div id="paymentBoard" style="display:none">
+      <!-- QR card -->
+      <div class="card" style="text-align:center">
+        <div style="font-size:1rem;font-weight:800;margin-bottom:12px">💳 Thanh toán buổi hôm nay</div>
+        <div id="boardQr"></div>
+        <button id="boardSelfReportBtn" class="btn btn-success btn-block btn-lg" style="margin-top:14px;display:none" onclick="selfReportPayment()">
+          ✅ Tôi đã chuyển khoản
+        </button>
+        <div id="boardSelfStatus" style="display:none;padding:10px 0;font-weight:700"></div>
+      </div>
+      <!-- Player payment list -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Danh sách hôm nay</span>
+          <span id="boardPaidBadge" class="badge badge-grey">—</span>
+        </div>
+        <div id="boardList"></div>
+      </div>
+    </div>
+
+    <!-- Draft board (shown when status=draft) -->
+    <div id="draftBoard" style="display:none"></div>
+
+    <!-- Match Day Board (shown when status=teams or playing) -->
+    <div id="matchDayBoard" style="display:none">
+      <!-- Live match timer (shown when status=playing) -->
+      <div id="matchTimerCard" style="display:none"></div>
+      <div class="tabs">
+        <button class="tab active" id="mdTab-myteam"   onclick="switchMDTab('myteam')">Đội tôi</button>
+        <button class="tab"        id="mdTab-allteams" onclick="switchMDTab('allteams')">Tất cả đội</button>
+        <button class="tab"        id="mdTab-trades"   onclick="switchMDTab('trades')">🤝 Đổi người</button>
+      </div>
+      <div id="md-myteam"></div>
+      <div id="md-allteams" style="display:none"></div>
+      <div id="md-trades"   style="display:none"></div>
+    </div>
+
+    <!-- Players confirmed (hidden when game is done) -->
+    <div id="rsvpListCard" class="card">
+      <div class="card-header">
+        <span class="card-title" id="confirmedLabel">Đã đăng ký</span>
+        <span class="badge badge-green" id="confirmedCount">0</span>
+      </div>
+      <ul class="player-list" id="playerList">
+        <li class="empty">
+          <div class="empty-icon">👋</div>
+          <p style="font-size:.88rem">Chưa ai đăng ký</p>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+</main>
+
+<!-- RSVP Modal -->
+<div class="modal-overlay" id="rsvpModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 class="modal-title" id="modalTitle">Đăng ký đá bóng</h2>
+
+    <div class="form-group">
+      <label class="form-label" id="nameLabel">Tên của bạn</label>
+      <div class="form-select-wrap">
+        <select class="form-select" id="playerSelect">
+          <option value="">-- Chọn tên --</option>
+        </select>
+      </div>
+      <div style="margin-top:8px">
+        <input class="form-input" id="newNameInput" placeholder="Hoặc nhập tên mới..." style="display:none">
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;font-size:.8rem" onclick="toggleNewName()" id="newNameBtn">
+        + Tên mới / New player
+      </button>
+    </div>
+
+    <div class="form-group" id="guestSection">
+      <label class="form-label" id="guestLabel">Mang khách?</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <button class="btn btn-ghost btn-sm" onclick="changeGuests(-1)">−</button>
+        <span style="font-size:1.1rem;font-weight:700;min-width:24px;text-align:center" id="guestCount">0</span>
+        <button class="btn btn-ghost btn-sm" onclick="changeGuests(1)">+</button>
+        <span style="font-size:.85rem;color:var(--text-muted)">khách</span>
+      </div>
+      <div id="guestNames"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Vị trí thi đấu tuần này</label>
+      <div class="pos-picker" id="posPicker">
+        <button class="pos-btn" data-pos="GK" onclick="selectPos('GK')">🧤<br>GK</button>
+        <button class="pos-btn" data-pos="DEF" onclick="selectPos('DEF')">🛡️<br>DEF</button>
+        <button class="pos-btn" data-pos="MID" onclick="selectPos('MID')">⚙️<br>MID</button>
+        <button class="pos-btn" data-pos="FWD" onclick="selectPos('FWD')">⚡<br>FWD</button>
+        <button class="pos-btn selected" data-pos="flex" onclick="selectPos('flex')">🔄<br>Flex</button>
+      </div>
+    </div>
+
+    <button class="btn btn-cta" onclick="submitRsvp()" id="submitBtn">
+      Xác nhận
+    </button>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()" style="margin-top:8px">
+      Huỷ
+    </button>
+  </div>
+</div>
+
+<!-- Cancel RSVP Modal -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 class="modal-title">Huỷ đăng ký?</h2>
+    <p style="color:var(--text-muted);margin-bottom:20px;font-size:.93rem">
+      Bạn có chắc muốn huỷ đăng ký buổi đá này không?
+    </p>
+    <button class="btn btn-danger btn-block" onclick="cancelRsvp()">Huỷ đăng ký</button>
+    <button class="btn btn-ghost btn-block" onclick="closeCancelModal()" style="margin-top:8px">Không</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Pick announcement overlay -->
+<div id="pickAnnouncement" class="pick-announce-overlay">
+  <div class="pick-announce-content">
+    <div class="pick-announce-sub">⚽ Pick</div>
+    <div class="pick-announce-captain" id="announceCapt"></div>
+    <div class="pick-announce-label">chọn</div>
+    <div class="pick-announce-player" id="announcePlayer"></div>
+  </div>
+</div>
+
+<!-- Floating emoji overlay -->
+<div id="reactionOverlay"></div>
+
+<!-- Draft footer: reaction bar + slide-up chat -->
+<div id="draftFooter" style="display:none">
+  <div id="chatPanel" class="chat-panel" style="display:none">
+    <div class="chat-drag-handle"></div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-row">
+      <input class="chat-input-field" id="chatInputField"
+        placeholder="Nhắn gì đi..." maxlength="120"
+        onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-send-btn" onclick="sendChat()">➤</button>
+    </div>
+  </div>
+  <div class="reaction-bar">
+    <button class="reaction-btn" onclick="sendReaction('🔥')">🔥</button>
+    <button class="reaction-btn" onclick="sendReaction('😱')">😱</button>
+    <button class="reaction-btn" onclick="sendReaction('💀')">💀</button>
+    <button class="reaction-btn" onclick="sendReaction('👑')">👑</button>
+    <button class="reaction-btn" onclick="sendReaction('😂')">😂</button>
+    <button class="reaction-btn" onclick="sendReaction('💪')">💪</button>
+    <button class="chat-toggle-btn" id="chatToggleBtn" onclick="toggleChat()">
+      💬 <span class="unread-badge" id="unreadBadge" style="display:none">0</span>
+    </button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/rsvp.js"></script>
+</body>
+</html>
