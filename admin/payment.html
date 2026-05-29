@@ -47,6 +47,13 @@
     <div id="pendingList"></div>
   </div>
 
+  <!-- Search bar -->
+  <div class="form-group" style="margin-bottom:12px">
+    <input type="search" id="paymentSearch" class="form-input" 
+           placeholder="🔍 Tìm tên cầu thủ..." 
+           oninput="filterPaymentList(this.value)">
+  </div>
+
   <!-- Tabs: Per-play / Subscribers / Guests -->
   <div class="tabs">
     <button class="tab active" id="tab-ppp" onclick="switchTab('ppp')">Trả theo buổi</button>
@@ -79,12 +86,38 @@
 <script src="/js/utils.js"></script>
 <script src="/js/admin-auth.js"></script>
 <script>
+// ─── Payment constants & formatters ──────────────────────────────────────────
+const PAY_PER_PLAY = 35000; // VND per session — change here to update everywhere
+
+function fmtVND(amount) {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
+}
+
+function fmtTime(date) {
+  if (!date) return '—';
+  return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function fmtDate(date) {
+  if (!date) return '—';
+  return new Intl.DateTimeFormat('vi-VN', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  }).format(date);
+}
+
+// ─── Page state ───────────────────────────────────────────────────────────────
 let session = null;
 let rsvps = {};
 let payments = {};
 let players = {};
 let currentTab = 'ppp';
 let unsubPayments = null;
+let paymentSearchTerm = '';
+
+function filterPaymentList(term) {
+  paymentSearchTerm = term.toLowerCase().trim();
+  renderTab();
+}
 
 window.addEventListener('DOMContentLoaded', () => requireAuth(initPayment));
 
@@ -192,30 +225,34 @@ async function syncPayments() {
     }
   });
 
-  // Create payment entries for new 'in' RSVPs
+  // Create or repair payment entries for 'in' RSVPs
   Object.entries(rsvps).forEach(([pid, r]) => {
     if (r.status !== 'in') return;
-    if (!payments[pid]) {
-      const isSub = r.isSubscriber;
-      const amount = isSub ? 0 : PAY_PER_PLAY;
-      const validGuests = (r.guests || []).filter(g => g.name?.trim());
-      const guestAmt = validGuests.length * PAY_PER_PLAY;
-      const ref = db.collection('sessions').doc(session.id).collection('payments').doc(pid);
-      const data = {
-        playerId: pid,
-        playerName: r.playerName,
-        type: isSub ? 'subscriber' : 'pay-per-play',
-        amount,
-        paid: isSub,
-        paidAt: isSub ? firebase.firestore.Timestamp.now() : null,
-        guestCount: validGuests.length,
-        guestAmount: guestAmt,
-        guestPaid: false
-      };
-      batch.set(ref, data);
-      payments[pid] = data;
-      changed = true;
-    }
+    const existing = payments[pid];
+    // Skip if already a fully-formed record (has type field)
+    if (existing && existing.type) return;
+
+    const isSub = r.isSubscriber;
+    const amount = isSub ? 0 : PAY_PER_PLAY;
+    const validGuests = (r.guests || []).filter(g => g.name?.trim());
+    const guestAmt = validGuests.length * PAY_PER_PLAY;
+    const ref = db.collection('sessions').doc(session.id).collection('payments').doc(pid);
+    const data = {
+      playerId: pid,
+      playerName: r.playerName,
+      type: isSub ? 'subscriber' : 'pay-per-play',
+      amount,
+      paid: existing?.paid || isSub,
+      paidAt: existing?.paidAt || (isSub ? firebase.firestore.Timestamp.now() : null),
+      guestCount: validGuests.length,
+      guestAmount: guestAmt,
+      guestPaid: existing?.guestPaid || false,
+      // preserve self-report fields if player already reported
+      ...(existing?.selfReported ? { selfReported: true, selfReportedAt: existing.selfReportedAt } : {})
+    };
+    batch.set(ref, data);
+    payments[pid] = data;
+    changed = true;
   });
 
   if (changed) await batch.commit();
@@ -297,15 +334,24 @@ function renderTab() {
   if (currentTab === 'ppp') {
     list.innerHTML = items.map(p => renderPayRow(p)).join('');
   } else if (currentTab === 'sub') {
-    list.innerHTML = items.map(p => `
+    list.innerHTML = items.map(p => {
+      if (paymentSearchTerm && !p.playerName.toLowerCase().includes(paymentSearchTerm)) {
+        return '';
+      }
+      return `
       <div class="check-row checked" style="cursor:default">
         <div style="width:17px;height:17px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;flex-shrink:0">✓</div>
         <span class="check-label">${esc(p.playerName)}</span>
         <span class="check-amount" style="color:var(--success)">⭐ Miễn phí</span>
       </div>
-    `).join('');
+    `}).join('');
   } else if (currentTab === 'guest') {
-    list.innerHTML = items.map(p => `
+    list.innerHTML = items.map(p => {
+      // Apply search filter to guest section too
+      if (paymentSearchTerm && !p.playerName.toLowerCase().includes(paymentSearchTerm)) {
+        return '';
+      }
+      return `
       <div class="card" style="margin-bottom:8px">
         <div style="font-weight:700;margin-bottom:8px">${esc(p.playerName)} <span style="font-size:.8rem;color:var(--text-muted)">+${p.guestCount} khách</span></div>
         <div class="check-row ${p.guestPaid ? 'checked' : ''}" onclick="toggleGuestPaid('${p.playerId}')">
@@ -314,11 +360,16 @@ function renderTab() {
           <span class="check-amount">${fmtVND(p.guestAmount)}</span>
         </div>
       </div>
-    `).join('');
+    `}).join('');
   }
 }
 
 function renderPayRow(p) {
+  // Apply search filter
+  if (paymentSearchTerm && !p.playerName.toLowerCase().includes(paymentSearchTerm)) {
+    return '';
+  }
+  
   return `<div class="check-row ${p.paid ? 'checked' : ''}" id="pay-${p.playerId}" onclick="togglePaid('${p.playerId}')">
     <input type="checkbox" ${p.paid ? 'checked' : ''} onclick="event.stopPropagation();togglePaid('${p.playerId}')">
     <div style="flex:1">

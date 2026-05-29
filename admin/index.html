@@ -3,585 +3,107 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin — Bóng Đá Thứ 7</title>
+  <title>Admin - Bóng Đá Thứ 7</title>
   <meta name="theme-color" content="#1b4332">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
-
-<header class="app-header">
-  <h1>🔧 Admin Panel</h1>
-  <div class="header-right">
-    <button class="lang-btn" id="langBtn">EN</button>
-    <button class="admin-link" onclick="logoutAdmin()" style="background:rgba(198,40,40,.25);border-color:rgba(198,40,40,.4)">Logout</button>
-  </div>
-</header>
-
-<main class="container" id="adminContent" style="display:none">
-
-  <!-- Current session info -->
-  <div class="card" id="sessionCard">
-    <div class="card-header">
-      <span class="card-title">Buổi đá hiện tại</span>
-      <span id="sessionStatus" class="badge badge-grey">—</span>
+<body class="app-shell admin-page">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1>Bóng Đá Thứ 7</h1>
+      <p id="adminSessionDate" class="subtle">--</p>
     </div>
-    <div id="sessionInfo" style="color:var(--text-muted);font-size:.9rem">Chưa có buổi đá</div>
-    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap" id="sessionActions"></div>
-  </div>
-
-  <!-- Nav grid -->
-  <div class="admin-nav">
-    <a href="/admin/payment.html" class="admin-nav-item">
-      <div class="nav-icon">💰</div>
-      <div class="nav-label">Thanh toán</div>
-      <div class="nav-desc">Theo dõi tiền đóng góp</div>
-    </a>
-    <a href="/admin/teams.html" class="admin-nav-item">
-      <div class="nav-icon">👥</div>
-      <div class="nav-label">Đội bóng</div>
-      <div class="nav-desc">Tạo đội, chọn đội trưởng</div>
-    </a>
-    <a href="/admin/rotation.html" class="admin-nav-item">
-      <div class="nav-icon">🔄</div>
-      <div class="nav-label">Lịch trận</div>
-      <div class="nav-desc">Điều phối king of court</div>
-    </a>
-    <a href="/board.html" class="admin-nav-item" target="_blank">
-      <div class="nav-icon">📺</div>
-      <div class="nav-label">Live Board</div>
-      <div class="nav-desc">Màn hình chiếu trực tiếp</div>
-    </a>
-    <a href="/leaderboard.html" class="admin-nav-item">
-      <div class="nav-icon">🏆</div>
-      <div class="nav-label">Bảng Xếp Hạng</div>
-      <div class="nav-desc">Thống kê cầu thủ</div>
-    </a>
-    <a href="/history.html" class="admin-nav-item">
-      <div class="nav-icon">📋</div>
-      <div class="nav-label">Lịch Sử</div>
-      <div class="nav-desc">Các buổi đã đá</div>
-    </a>
-  </div>
-
-  <!-- Players management -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Cầu thủ (<span id="playerCount">0</span>)</span>
-      <button class="btn btn-sm btn-primary" onclick="openAddPlayer()">+ Thêm</button>
+    <div class="topbar-actions">
+      <button id="adminLangToggle" class="chip-btn" type="button">EN</button>
+      <button class="chip-btn danger" type="button" onclick="logoutAdmin()">Logout</button>
     </div>
-    <div id="playerList" style="max-height:300px;overflow-y:auto"></div>
-  </div>
+  </header>
 
-  <!-- Payment / Banking settings -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">💳 Cài đặt thanh toán</span>
-      <button class="btn btn-sm btn-ghost" onclick="saveBankInfo()">Lưu</button>
-    </div>
-    <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:12px">Cầu thủ sẽ thấy QR này sau khi RSVP khoá.</p>
-    <div class="form-group">
-      <label class="form-label">Ngân hàng</label>
-      <div class="form-select-wrap">
-        <select class="form-select" id="bankId">
-          <option value="">-- Chọn ngân hàng --</option>
-          <option value="VCB">Vietcombank (VCB)</option>
-          <option value="TCB">Techcombank (TCB)</option>
-          <option value="MB">MB Bank (MB)</option>
-          <option value="ACB">ACB</option>
-          <option value="VTB">Vietinbank (VTB)</option>
-          <option value="BIDV">BIDV</option>
-          <option value="VPB">VPBank (VPB)</option>
-          <option value="TPB">TPBank (TPB)</option>
-          <option value="STB">Sacombank (STB)</option>
-          <option value="HDB">HDBank (HDB)</option>
-          <option value="OCB">OCB</option>
-          <option value="MSB">MSB</option>
-          <option value="SHB">SHB</option>
-          <option value="EIB">Eximbank (EIB)</option>
-        </select>
+  <main id="adminContent" class="page" hidden>
+    <section class="admin-panel">
+      <div class="section-head compact">
+        <div>
+          <h2 data-i18n="sessionControls">Điều khiển buổi đá</h2>
+          <p id="adminStatusLine">--</p>
+        </div>
+        <span id="adminStatusBadge" class="status-badge is-open">Open</span>
       </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Số tài khoản</label>
-      <input class="form-input" id="bankAccount" placeholder="0123456789" type="tel">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Tên chủ tài khoản</label>
-      <input class="form-input" id="bankAccountName" placeholder="NGUYEN VAN A">
-    </div>
-    <div id="bankQrPreview" style="display:none;text-align:center;margin-top:12px">
-      <img id="bankQrImg" style="width:180px;height:180px;border-radius:8px;border:1px solid var(--border)" alt="QR preview">
-      <div style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Xem trước QR (số tiền mẫu)</div>
-    </div>
-    <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="saveBankInfo()">💾 Lưu cài đặt</button>
-  </div>
 
-</main>
-
-<!-- Add player modal -->
-<div class="modal-overlay" id="addPlayerModal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <h2 class="modal-title">Thêm cầu thủ mới</h2>
-    <div class="form-group">
-      <label class="form-label">Tên</label>
-      <input class="form-input" id="newPlayerName" placeholder="Nguyễn Văn A">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Số điện thoại (không bắt buộc)</label>
-      <input class="form-input" id="newPlayerPhone" placeholder="09xxxxxxxx" type="tel">
-    </div>
-    <div class="form-group">
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-        <input type="checkbox" id="newPlayerSub" style="width:18px;height:18px;accent-color:var(--primary)">
-        <span style="font-weight:600">Thành viên tháng (150k/tháng)</span>
-      </label>
-    </div>
-    <div class="form-group" id="subExpiryGroup" style="display:none">
-      <label class="form-label">Hạn thành viên</label>
-      <input class="form-input" id="newPlayerExpiry" type="date">
-    </div>
-    <button class="btn btn-primary btn-block btn-lg" onclick="savePlayer()">Lưu</button>
-    <button class="btn btn-ghost btn-block" onclick="closeAddPlayer()" style="margin-top:8px">Huỷ</button>
-  </div>
-</div>
-
-<!-- Create session modal -->
-<div class="modal-overlay" id="createSessionModal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <h2 class="modal-title">Tạo buổi đá mới</h2>
-    <div class="form-group">
-      <label class="form-label">Ngày đá (Thứ Bảy)</label>
-      <input class="form-input" id="newSessionDate" type="date">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Hạn đăng ký</label>
-      <input class="form-input" id="newSessionCutoff" type="datetime-local">
-      <div class="form-hint">Mặc định: Thứ Sáu 20:00</div>
-    </div>
-    <button class="btn btn-success btn-block btn-lg" onclick="createSession()">Tạo buổi đá</button>
-    <button class="btn btn-ghost btn-block" onclick="closeCreateSession()" style="margin-top:8px">Huỷ</button>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-<script src="/js/firebase-config.js"></script>
-<script src="/js/utils.js"></script>
-<script src="/js/admin-auth.js"></script>
-<script>
-// ─── Init ─────────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  initLangToggle('langBtn');
-  requireAuth(initAdmin);
-});
-
-async function initAdmin() {
-  document.getElementById('adminContent').style.display = '';
-  await loadSession();
-  await loadPlayers();
-  await loadBankInfo();
-}
-
-// ─── Session ──────────────────────────────────────────────────────────────────
-let currentSession = null;
-
-async function loadSession() {
-  currentSession = await getActiveSession();
-  renderSessionCard();
-}
-
-function renderSessionCard() {
-  const statusEl = document.getElementById('sessionStatus');
-  const infoEl = document.getElementById('sessionInfo');
-  const actionsEl = document.getElementById('sessionActions');
-
-  if (!currentSession) {
-    statusEl.textContent = 'Chưa có';
-    statusEl.className = 'badge badge-grey';
-    infoEl.textContent = 'Chưa có buổi đá nào. Tạo buổi mới.';
-    actionsEl.innerHTML = `<button class="btn btn-success" onclick="openCreateSession()">+ Tạo buổi đá</button>`;
-    return;
-  }
-
-  const satDate = currentSession.date.toDate ? currentSession.date.toDate() : new Date(currentSession.date);
-  infoEl.textContent = fmtDate(satDate);
-
-  const statusMap = {
-    rsvp:   { label: 'RSVP mở',      cls: 'badge-green'  },
-    locked: { label: 'Đã khoá',      cls: 'badge-yellow' },
-    draft:  { label: 'Đang Draft',   cls: 'badge-blue'   },
-    teams:  { label: 'Đội sẵn sàng', cls: 'badge-blue'   },
-    playing:{ label: 'Đang đá',      cls: 'badge-green'  },
-    done:   { label: 'Xong',         cls: 'badge-grey'   },
-  };
-  const s = statusMap[currentSession.status] || { label: currentSession.status, cls: 'badge-grey' };
-  statusEl.textContent = s.label;
-  statusEl.className = 'badge ' + s.cls;
-
-  const btnMap = {
-    rsvp:    `<button class="btn btn-sm btn-outline" onclick="lockSession()">🔒 Khoá RSVP</button>`,
-    locked:  `<a href="/admin/teams.html" class="btn btn-sm btn-primary">⚽ Bắt đầu Draft</a>`,
-    draft:   `<a href="/admin/teams.html" class="btn btn-sm btn-outline">👁 Xem Draft</a>`,
-    teams:   `<button class="btn btn-sm btn-success" onclick="setStatus('playing')">▶ Bắt đầu</button>`,
-    playing: `<button class="btn btn-sm btn-danger" onclick="setStatus('done')">⏹ Kết thúc</button>`,
-  };
-  actionsEl.innerHTML = (btnMap[currentSession.status] || '') +
-    `<button class="btn btn-sm btn-ghost" onclick="openCreateSession()">+ Buổi mới</button>`;
-}
-
-async function lockSession() {
-  if (!currentSession) return;
-  await db.collection('sessions').doc(currentSession.id).update({ status: 'locked' });
-  currentSession.status = 'locked';
-  renderSessionCard();
-  showToast('Đã khoá RSVP', 'success');
-}
-
-async function setStatus(status) {
-  if (!currentSession) return;
-  if (status === 'done' && !currentSession.statsComputed) {
-    showToast('Đang tính thống kê...', '');
-    await computeAndSaveStats();
-  }
-  await db.collection('sessions').doc(currentSession.id).update({
-    status,
-    ...(status === 'done' ? { statsComputed: true } : {})
-  });
-  currentSession.status = status;
-  renderSessionCard();
-  showToast(status === 'done' ? '🏁 Buổi đá kết thúc! Thống kê đã lưu.' : t('saved'), 'success');
-}
-
-async function computeAndSaveStats() {
-  if (!currentSession) return;
-
-  try {
-    // ── Load teams ──────────────────────────────────────────────────────────
-    const teamsSnap = await db.collection('sessions').doc(currentSession.id)
-      .collection('teams').get();
-    const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (!teams.length) return;
-
-    // ── Guest filter ─────────────────────────────────────────────────────────
-    const isGuest = id => /^.+_g\d+$/.test(id);
-
-    // ── Build per-player deltas ──────────────────────────────────────────────
-    const deltas = {}; // { playerId: { matchWins, matchesTotal, captainCount } }
-
-    teams.forEach(team => {
-      const wins   = team.wins   || 0;
-      const losses = team.losses || 0;
-
-      (team.players || []).forEach(p => {
-        if (isGuest(p.id)) return;
-        if (!deltas[p.id]) deltas[p.id] = { matchWins: 0, matchesTotal: 0, captainCount: 0 };
-        deltas[p.id].matchWins    += wins;
-        deltas[p.id].matchesTotal += wins + losses;
-      });
-
-      if (team.captainId && !isGuest(team.captainId)) {
-        if (!deltas[team.captainId]) deltas[team.captainId] = { matchWins: 0, matchesTotal: 0, captainCount: 0 };
-        deltas[team.captainId].captainCount++;
-      }
-    });
-
-    const playerIds = Object.keys(deltas);
-    if (!playerIds.length) return;
-
-    // ── Session date strings for streak ──────────────────────────────────────
-    const satDate = currentSession.date.toDate
-      ? currentSession.date.toDate() : new Date(currentSession.date);
-    const currentSatStr = satDate.toISOString().split('T')[0];
-
-    const prevSat = new Date(satDate);
-    prevSat.setDate(prevSat.getDate() - 7);
-    const prevSatStr = prevSat.toISOString().split('T')[0];
-
-    // ── Read current stats for streak computation ────────────────────────────
-    const playerSnaps = await Promise.all(
-      playerIds.map(id => db.collection('players').doc(id).get())
-    );
-
-    const batch = db.batch();
-    playerSnaps.forEach(snap => {
-      const pid = snap.id;
-      const delta = deltas[pid];
-      const existing = (snap.exists ? snap.data()?.stats : null) || {};
-
-      const playedLastWeek = existing.lastSessionDate === prevSatStr;
-      const newStreak = playedLastWeek ? (existing.currentStreak || 0) + 1 : 1;
-      const newBest   = Math.max(existing.bestStreak || 0, newStreak);
-
-      batch.set(db.collection('players').doc(pid), {
-        stats: {
-          sessionsPlayed:  firebase.firestore.FieldValue.increment(1),
-          matchWins:       firebase.firestore.FieldValue.increment(delta.matchWins),
-          matchesTotal:    firebase.firestore.FieldValue.increment(delta.matchesTotal),
-          captainCount:    firebase.firestore.FieldValue.increment(delta.captainCount),
-          currentStreak:   newStreak,
-          bestStreak:      newBest,
-          lastSessionDate: currentSatStr,
-        }
-      }, { merge: true });
-    });
-
-    await batch.commit();
-    console.log(`Stats saved for ${playerIds.length} players.`);
-
-    // ── Save self-contained session summary ──────────────────────────────────
-    try {
-      const rotSnap = await db.collection('sessions').doc(currentSession.id)
-        .collection('state').doc('rotation').get();
-      const rotData = rotSnap.exists ? rotSnap.data() : null;
-
-      const rsvpSnap = await db.collection('sessions').doc(currentSession.id)
-        .collection('rsvps').get();
-      const rsvpList = rsvpSnap.docs
-        .filter(d => d.data().status === 'in')
-        .map(d => ({ id: d.id, name: d.data().playerName, position: d.data().position || 'flex' }));
-
-      // Build team ID → name/color map for denormalizing match history
-      const teamMap = {};
-      teams.forEach(t => { teamMap[t.id] = { name: t.name, color: t.color }; });
-
-      const rawHistory = rotData?.matchHistory || [];
-      const denormalizedHistory = rawHistory.map(m => ({
-        teamA:      { id: m.teamA, ...(teamMap[m.teamA] || { name: '?', color: 'grey' }) },
-        teamB:      { id: m.teamB, ...(teamMap[m.teamB] || { name: '?', color: 'grey' }) },
-        winnerId:   m.winnerId || null,
-        winnerName: m.winnerId ? (teamMap[m.winnerId]?.name || '?') : null,
-        time:       m.time || null,
-      }));
-
-      const topTeam = [...teams].sort((a, b) => (b.wins || 0) - (a.wins || 0))[0];
-
-      const summaryTeams = teams.map(t => ({
-        id:          t.id,
-        name:        t.name,
-        color:       t.color,
-        captainId:   t.captainId || null,
-        captainName: (t.players || []).find(p => p.id === t.captainId)?.name || null,
-        wins:        t.wins  || 0,
-        losses:      t.losses || 0,
-        players:     (t.players || []).map(p => ({ id: p.id, name: p.name })),
-      }));
-
-      await db.collection('sessions').doc(currentSession.id).update({
-        summary: {
-          totalPlayers:     rsvpList.length,
-          totalMatches:     rawHistory.length,
-          format:           rotData?.format || '3team',
-          matchDurationSecs: rotData?.matchDurationSecs || 900,
-          teams:            summaryTeams,
-          matchHistory:     denormalizedHistory,
-          topTeam:          topTeam ? { name: topTeam.name, color: topTeam.color, wins: topTeam.wins || 0 } : null,
-          attendance:       rsvpList,
-          savedAt:          new Date().toISOString(),
-        }
-      });
-      console.log('Session summary saved.');
-    } catch (e) {
-      console.warn('Summary save failed (non-critical):', e);
-    }
-  } catch (e) {
-    console.error('Stats computation error:', e);
-    // Don't block session close on stats failure
-  }
-}
-
-function openCreateSession() {
-  const sat = getNextSaturday();
-  const cutoff = getCutoff(sat);
-  document.getElementById('newSessionDate').value = sessionId(sat);
-  // Format for datetime-local: YYYY-MM-DDTHH:MM
-  const co = new Date(cutoff);
-  const pad = n => String(n).padStart(2, '0');
-  document.getElementById('newSessionCutoff').value =
-    `${co.getFullYear()}-${pad(co.getMonth()+1)}-${pad(co.getDate())}T${pad(co.getHours())}:${pad(co.getMinutes())}`;
-  document.getElementById('createSessionModal').classList.add('active');
-  document.body.style.overflow = 'hidden';
-}
-function closeCreateSession() {
-  document.getElementById('createSessionModal').classList.remove('active');
-  document.body.style.overflow = '';
-}
-
-async function createSession() {
-  const dateStr = document.getElementById('newSessionDate').value;
-  const cutoffStr = document.getElementById('newSessionCutoff').value;
-  if (!dateStr || !cutoffStr) { showToast('Nhập đủ thông tin!', 'error'); return; }
-
-  const satDate = new Date(dateStr + 'T00:00:00');
-  const cutoffDate = new Date(cutoffStr);
-  const sid = dateStr;
-
-  await db.collection('sessions').doc(sid).set({
-    date: firebase.firestore.Timestamp.fromDate(satDate),
-    saturdayDate: dateStr,
-    rsvpCutoff: firebase.firestore.Timestamp.fromDate(cutoffDate),
-    status: 'rsvp',
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  await db.collection('config').doc('app').set({ currentSessionId: sid }, { merge: true });
-
-  closeCreateSession();
-  await loadSession();
-  showToast('Đã tạo buổi đá!', 'success');
-}
-
-// ─── Players ──────────────────────────────────────────────────────────────────
-let players = [];
-
-async function loadPlayers() {
-  const snap = await db.collection('players').orderBy('name').get();
-  players = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  renderPlayers();
-}
-
-function renderPlayers() {
-  document.getElementById('playerCount').textContent = players.length;
-  const list = document.getElementById('playerList');
-  if (!players.length) {
-    list.innerHTML = '<div class="empty" style="padding:16px 0"><p>Chưa có cầu thủ nào</p></div>';
-    return;
-  }
-  list.innerHTML = players.map(p => {
-    const expiry = p.subscriptionExpiry ?
-      (p.subscriptionExpiry.toDate ? p.subscriptionExpiry.toDate() : new Date(p.subscriptionExpiry)) : null;
-    const subValid = p.isSubscriber && expiry && expiry > new Date();
-    return `<div class="player-item" style="margin-bottom:6px">
-      <div class="player-avatar">${initials(p.name)}</div>
-      <div style="flex:1">
-        <div class="player-name">${esc(p.name)}</div>
-        <div class="player-meta">${p.phone || 'Không có SĐT'} ${subValid ? '· <span style="color:var(--success);font-weight:700">⭐ Thành viên' + (expiry ? ' đến ' + fmtDate(expiry) : '') + '</span>' : ''}</div>
+      <div class="button-row">
+        <button class="btn primary" type="button" onclick="openPoll()" data-i18n="openPoll">Open Poll</button>
+        <button class="btn secondary" type="button" onclick="lockPoll()" data-i18n="lockPoll">Lock Poll</button>
+        <a class="btn accent" href="/admin/teams.html" data-i18n="randomizeTeams">Manage Teams</a>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="editPlayer('${p.id}')">✏️</button>
-    </div>`;
-  }).join('');
-}
 
-function openAddPlayer() {
-  document.getElementById('newPlayerName').value = '';
-  document.getElementById('newPlayerPhone').value = '';
-  document.getElementById('newPlayerSub').checked = false;
-  document.getElementById('newPlayerExpiry').value = '';
-  document.getElementById('subExpiryGroup').style.display = 'none';
-  document.getElementById('addPlayerModal').setAttribute('data-edit-id', '');
-  document.getElementById('addPlayerModal').querySelector('.modal-title').textContent = 'Thêm cầu thủ mới';
-  document.getElementById('addPlayerModal').classList.add('active');
-  document.body.style.overflow = 'hidden';
-}
-function closeAddPlayer() {
-  document.getElementById('addPlayerModal').classList.remove('active');
-  document.body.style.overflow = '';
-}
+      <label class="field-label" for="capInput" data-i18n="maxCap">Giới hạn người chơi</label>
+      <div class="inline-field">
+        <input id="capInput" class="input" type="number" min="3" max="60" value="21">
+        <button class="btn secondary" type="button" onclick="saveCap()" data-i18n="save">Lưu</button>
+      </div>
+    </section>
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('newPlayerSub').addEventListener('change', e => {
-    document.getElementById('subExpiryGroup').style.display = e.target.checked ? '' : 'none';
-    if (e.target.checked && !document.getElementById('newPlayerExpiry').value) {
-      const expiry = new Date();
-      expiry.setDate(expiry.getDate() + 30);
-      const pad = n => String(n).padStart(2, '0');
-      document.getElementById('newPlayerExpiry').value =
-        `${expiry.getFullYear()}-${pad(expiry.getMonth()+1)}-${pad(expiry.getDate())}`;
-    }
-  });
-});
+    <section class="admin-panel">
+      <div class="section-head compact">
+        <div>
+          <h2 data-i18n="playerList">Danh sách cầu thủ</h2>
+          <p id="gkIndicator">GKs: 0/3</p>
+        </div>
+        <span id="adminGoingCount" class="pill">0 Going</span>
+      </div>
+      <div id="adminPlayers" class="admin-player-list"></div>
+    </section>
 
-async function savePlayer() {
-  const name = document.getElementById('newPlayerName').value.trim();
-  if (!name) { showToast('Nhập tên!', 'error'); return; }
-  const phone = document.getElementById('newPlayerPhone').value.trim();
-  const isSub = document.getElementById('newPlayerSub').checked;
-  const expiryStr = document.getElementById('newPlayerExpiry').value;
+    <!-- Bank config for VietQR payment -->
+    <section class="admin-panel">
+      <div class="section-head compact">
+        <div>
+          <h2>💳 Tài khoản ngân hàng</h2>
+          <p>Cầu thủ quét QR để chuyển tiền sân</p>
+        </div>
+      </div>
+      <div class="bank-config-form">
+        <div>
+          <label class="field-label" for="bankCode">Ngân hàng</label>
+          <select id="bankCode" class="input" style="height:48px">
+            <option value="">— Chọn ngân hàng —</option>
+            <option value="MB">MB Bank (Quân Đội)</option>
+            <option value="VCB">Vietcombank</option>
+            <option value="TCB">Techcombank</option>
+            <option value="ACB">ACB</option>
+            <option value="VPB">VPBank</option>
+            <option value="BIDV">BIDV</option>
+            <option value="ICB">Vietinbank (CTG)</option>
+            <option value="TPB">TPBank</option>
+            <option value="HDB">HDBank</option>
+            <option value="STB">Sacombank</option>
+            <option value="MSB">MSB Maritime</option>
+            <option value="VIB">VIB</option>
+            <option value="SHB">SHB</option>
+            <option value="OCB">OCB</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="accountNumber">Số tài khoản</label>
+          <input id="accountNumber" class="input" type="text" placeholder="VD: 0123456789" inputmode="numeric">
+        </div>
+        <div>
+          <label class="field-label" for="accountName">Tên chủ tài khoản (in hoa)</label>
+          <input id="accountName" class="input" type="text" placeholder="VD: NGUYEN VAN A" style="text-transform:uppercase">
+        </div>
+        <button class="btn primary" type="button" onclick="saveBankConfig()" style="min-height:48px">
+          💾 Lưu cấu hình ngân hàng
+        </button>
+        <div id="bankConfigStatus" style="text-align:center;font-size:.84rem;color:var(--muted);min-height:20px"></div>
+      </div>
+    </section>
+  </main>
 
-  const data = {
-    name,
-    phone,
-    isSubscriber: isSub,
-    subscriptionExpiry: isSub && expiryStr
-      ? firebase.firestore.Timestamp.fromDate(new Date(expiryStr))
-      : null
-  };
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  const editId = document.getElementById('addPlayerModal').getAttribute('data-edit-id');
-  if (editId) {
-    await db.collection('players').doc(editId).update(data);
-  } else {
-    await db.collection('players').add(data);
-  }
-
-  closeAddPlayer();
-  await loadPlayers();
-  showToast(t('saved'), 'success');
-}
-
-async function editPlayer(id) {
-  const p = players.find(x => x.id === id);
-  if (!p) return;
-  document.getElementById('newPlayerName').value = p.name;
-  document.getElementById('newPlayerPhone').value = p.phone || '';
-  document.getElementById('newPlayerSub').checked = p.isSubscriber;
-  if (p.isSubscriber && p.subscriptionExpiry) {
-    const exp = p.subscriptionExpiry.toDate ? p.subscriptionExpiry.toDate() : new Date(p.subscriptionExpiry);
-    const pad = n => String(n).padStart(2, '0');
-    document.getElementById('newPlayerExpiry').value =
-      `${exp.getFullYear()}-${pad(exp.getMonth()+1)}-${pad(exp.getDate())}`;
-    document.getElementById('subExpiryGroup').style.display = '';
-  }
-  document.getElementById('addPlayerModal').setAttribute('data-edit-id', id);
-  document.getElementById('addPlayerModal').querySelector('.modal-title').textContent = 'Sửa cầu thủ';
-  document.getElementById('addPlayerModal').classList.add('active');
-  document.body.style.overflow = 'hidden';
-}
-
-function logoutAdmin() {
-  clearAdminAuth();
-  location.reload();
-}
-
-// ─── Bank / Payment settings ──────────────────────────────────────────────────
-async function loadBankInfo() {
-  const snap = await db.collection('config').doc('app').get();
-  if (!snap.exists) return;
-  const { bankId, bankAccount, bankAccountName } = snap.data();
-  if (bankId) document.getElementById('bankId').value = bankId;
-  if (bankAccount) document.getElementById('bankAccount').value = bankAccount;
-  if (bankAccountName) document.getElementById('bankAccountName').value = bankAccountName;
-  if (bankId && bankAccount) updateBankPreview(bankId, bankAccount, bankAccountName || '');
-}
-
-function updateBankPreview(bankId, bankAccount, bankAccountName) {
-  const qrUrl = `https://img.vietqr.io/image/${bankId}-${bankAccount}-compact2.jpg?amount=35000&addInfo=Bong%20da%20thu%207&accountName=${encodeURIComponent(bankAccountName)}`;
-  document.getElementById('bankQrImg').src = qrUrl;
-  document.getElementById('bankQrPreview').style.display = '';
-}
-
-async function saveBankInfo() {
-  const bankId = document.getElementById('bankId').value;
-  const bankAccount = document.getElementById('bankAccount').value.trim();
-  const bankAccountName = document.getElementById('bankAccountName').value.trim();
-  if (!bankId || !bankAccount) { showToast('Chọn ngân hàng và nhập số tài khoản!', 'error'); return; }
-  await db.collection('config').doc('app').set({ bankId, bankAccount, bankAccountName }, { merge: true });
-  updateBankPreview(bankId, bankAccount, bankAccountName);
-  showToast('Đã lưu!', 'success');
-}
-
-function esc(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(o => {
-  o.addEventListener('click', e => {
-    if (e.target === o) { o.classList.remove('active'); document.body.style.overflow = ''; }
-  });
-});
-</script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/admin-auth.js"></script>
 </body>
 </html>

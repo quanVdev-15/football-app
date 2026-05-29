@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bóng Đá Thứ 7</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #1b4332;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* ── Welcome hero ─────────────────────────────────────────── */
+    .welcome {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px 260px;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .welcome-ball {
+      font-size: 4.5rem;
+      line-height: 1;
+      margin-bottom: 20px;
+      opacity: 0;
+      transform: scale(0.4) rotate(-20deg);
+      animation: ballDrop 0.7s cubic-bezier(.34,1.56,.64,1) 0.2s forwards;
+    }
+
+    .welcome-title {
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -0.5px;
+      line-height: 1.15;
+      opacity: 0;
+      transform: translateY(16px);
+      animation: fadeUp 0.5s ease 0.7s forwards;
+    }
+
+    .welcome-sub {
+      font-size: 0.88rem;
+      color: rgba(255,255,255,0.6);
+      margin-top: 8px;
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.5s ease 0.9s forwards;
+    }
+
+    /* ── Login card (bottom sheet) ────────────────────────────── */
+    .login-sheet {
+      width: 100%;
+      max-width: 480px;
+      background: #fff;
+      border-radius: 28px 28px 0 0;
+      padding: 28px 24px 48px;
+      position: relative;
+      z-index: 10;
+      transform: translateY(100%);
+      animation: sheetUp 0.55s cubic-bezier(.32,.72,0,1) 1.1s forwards;
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.25);
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: #e5e7eb;
+      border-radius: 99px;
+      margin: 0 auto 24px;
+    }
+
+    .sheet-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #111;
+      margin-bottom: 4px;
+    }
+
+    .sheet-sub {
+      font-size: 0.82rem;
+      color: #6b7280;
+      margin-bottom: 24px;
+    }
+
+    /* ── Form fields ──────────────────────────────────────────── */
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 14px;
+      font-size: 1rem;
+      color: #111;
+      background: #f9fafb;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none;
+    }
+
+    .field input:focus {
+      border-color: #1b4332;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(27,67,50,0.12);
+    }
+
+    .field input.error {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 3px rgba(239,68,68,0.1);
+    }
+
+    .field-error {
+      font-size: 0.76rem;
+      color: #ef4444;
+      margin-top: 5px;
+      display: none;
+    }
+
+    .field-error.show { display: block; }
+
+    /* ── Submit button ────────────────────────────────────────── */
+    .btn-join {
+      width: 100%;
+      padding: 16px;
+      background: #1b4332;
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: transform 0.15s, background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn-join:active { transform: scale(0.97); }
+    .btn-join:disabled { background: #9ca3af; cursor: not-allowed; transform: none; }
+
+    .btn-join.loading::after {
+      content: '';
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+
+    /* ── Animations ───────────────────────────────────────────── */
+    @keyframes ballDrop {
+      to { opacity: 1; transform: scale(1) rotate(0deg); }
+    }
+
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes sheetUp {
+      to { transform: translateY(0); }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Welcome hero -->
+  <div class="welcome">
+    <div class="welcome-ball">⚽</div>
+    <h1 class="welcome-title">Bóng Đá<br>Thứ 7</h1>
+    <p class="welcome-sub">Đăng ký để tham gia buổi đá</p>
+  </div>
+
+  <!-- Login bottom sheet -->
+  <div class="login-sheet">
+    <div class="sheet-handle"></div>
+    <p class="sheet-title">Chào mừng!</p>
+    <p class="sheet-sub">Nhập tên và số điện thoại để bắt đầu.</p>
+
+    <div class="field">
+      <label for="nameInput">Tên của bạn</label>
+      <input
+        id="nameInput"
+        type="text"
+        placeholder="VD: Nguyễn Văn A"
+        autocomplete="name"
+        maxlength="40"
+      >
+      <p class="field-error" id="nameError">Nhập tên của bạn.</p>
+    </div>
+
+    <div class="field">
+      <label for="phoneInput">Số điện thoại</label>
+      <input
+        id="phoneInput"
+        type="tel"
+        placeholder="0912 345 678"
+        autocomplete="tel"
+        maxlength="11"
+        inputmode="numeric"
+      >
+      <p class="field-error" id="phoneError">Số điện thoại chưa đúng (VD: 0912345678).</p>
+    </div>
+
+    <button class="btn-join" id="joinBtn" onclick="handleJoin()">
+      Vào sân ⚽
+    </button>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script>
+    const IDENTITY_KEY = 'bdt7_player';
+
+    // Already logged in → skip to poll
+    (function checkExisting() {
+      try {
+        const saved = localStorage.getItem(IDENTITY_KEY);
+        if (saved) {
+          const p = JSON.parse(saved);
+          if (p.name && p.phone) window.location.replace('/index.html');
+        }
+      } catch (_) {}
+    })();
+
+    // Phone: strip spaces/dashes, validate Vietnamese format
+    function cleanPhone(raw) {
+      return raw.replace(/[\s\-().]/g, '');
+    }
+
+    function isValidPhone(phone) {
+      return /^0\d{9}$/.test(phone);
+    }
+
+    async function handleJoin() {
+      const name  = document.getElementById('nameInput').value.trim();
+      const phone = cleanPhone(document.getElementById('phoneInput').value);
+      let valid   = true;
+
+      // Clear errors
+      document.getElementById('nameInput').classList.remove('error');
+      document.getElementById('phoneInput').classList.remove('error');
+      document.getElementById('nameError').classList.remove('show');
+      document.getElementById('phoneError').classList.remove('show');
+
+      if (!name || name.length < 2) {
+        document.getElementById('nameInput').classList.add('error');
+        document.getElementById('nameError').classList.add('show');
+        valid = false;
+      }
+
+      if (!isValidPhone(phone)) {
+        document.getElementById('phoneInput').classList.add('error');
+        document.getElementById('phoneError').classList.add('show');
+        valid = false;
+      }
+
+      if (!valid) return;
+
+      const btn = document.getElementById('joinBtn');
+      btn.disabled = true;
+      btn.textContent = 'Đang lưu';
+      btn.classList.add('loading');
+
+      const playerId = 'ph_' + phone;
+
+      try {
+        await db.collection('players').doc(playerId).set({
+          name,
+          phone,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Firestore save skipped:', e.message);
+        // localStorage is the fallback — still proceed
+      }
+
+      localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name, phone, playerId }));
+      window.location.replace('/index.html');
+    }
+
+    // Allow Enter key to submit
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleJoin();
+    });
+  </script>
+</body>
+</html>

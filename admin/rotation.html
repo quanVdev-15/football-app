@@ -442,6 +442,16 @@ async function endMatch(winnerId) {
   if (!rotDoc) return;
   const { format, onCourtA, onCourtB, resting, consecutiveWins, matchHistory, schedule, currentMatchIndex } = rotDoc;
 
+  // Snapshot pre-match state for undo
+  const undoSnapshot = { onCourtA, onCourtB };
+  if (format === '3team') {
+    undoSnapshot.resting = resting || null;
+    undoSnapshot.consecutiveWins = consecutiveWins || {};
+  } else {
+    undoSnapshot.schedule = schedule ? schedule.map(m => ({ ...m })) : [];
+    undoSnapshot.currentMatchIndex = currentMatchIndex || 0;
+  }
+
   const history = matchHistory || [];
   history.push({
     teamA: onCourtA,
@@ -453,7 +463,8 @@ async function endMatch(winnerId) {
   let update = {
     matchHistory: history,
     status: 'idle',
-    currentMatchStart: null
+    currentMatchStart: null,
+    undoSnapshot
   };
 
   if (format === '3team') {
@@ -487,6 +498,51 @@ async function endMatch(winnerId) {
   }
 
   await db.collection('sessions').doc(session.id).collection('state').doc('rotation').update(update);
+}
+
+async function undoMatch() {
+  if (!rotDoc) return;
+  if (rotDoc.status === 'playing') {
+    showToast('⏱ Kết thúc trận hiện tại trước khi undo!', 'error');
+    return;
+  }
+  const history = rotDoc.matchHistory || [];
+  if (!history.length) {
+    showToast('Không có trận nào để hoàn tác!', 'error');
+    return;
+  }
+  const snapshot = rotDoc.undoSnapshot;
+  if (!snapshot) {
+    showToast('Không thể hoàn tác — không có dữ liệu trước đó.', 'error');
+    return;
+  }
+
+  const lastMatch = history[history.length - 1];
+  const { teamA, teamB, winnerId } = lastMatch;
+  const newHistory = history.slice(0, -1);
+
+  const batch = db.batch();
+  const rotRef = db.collection('sessions').doc(session.id).collection('state').doc('rotation');
+  batch.update(rotRef, {
+    ...snapshot,
+    matchHistory: newHistory,
+    status: 'idle',
+    currentMatchStart: null,
+    undoSnapshot: firebase.firestore.FieldValue.delete()
+  });
+
+  if (winnerId) {
+    const loserId = winnerId === teamA ? teamB : teamA;
+    const winnerRef = db.collection('sessions').doc(session.id).collection('teams').doc(winnerId);
+    const loserRef = db.collection('sessions').doc(session.id).collection('teams').doc(loserId);
+    batch.update(winnerRef, { wins: firebase.firestore.FieldValue.increment(-1) });
+    batch.update(loserRef, { losses: firebase.firestore.FieldValue.increment(-1) });
+    const w = teams.find(t => t.id === winnerId); if (w) w.wins = (w.wins || 0) - 1;
+    const l = teams.find(t => t.id === loserId); if (l) l.losses = (l.losses || 0) - 1;
+  }
+
+  await batch.commit();
+  showToast(winnerId ? '↩ Đã hoàn tác trận cuối!' : '↩ Đã hoàn tác — chuỗi thắng đã khôi phục.', 'success');
 }
 
 function calcNextMatch3(teamA, teamB, resting, winnerId, consecutiveWins) {
@@ -539,6 +595,7 @@ function renderHistory(history) {
     el.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem">Chưa có trận nào</div>';
     return;
   }
+  const canUndo = rotDoc?.status !== 'playing';
   el.innerHTML = history.slice().reverse().map((m, ri) => {
     const tA = teamById(m.teamA);
     const tB = teamById(m.teamB);
@@ -548,6 +605,7 @@ function renderHistory(history) {
       <span class="history-num">#${num}</span>
       <span class="history-teams">${esc(tA?.name||'?')} vs ${esc(tB?.name||'?')}</span>
       ${winner ? `<span class="history-winner">🏆 ${esc(winner.name)}</span>` : '<span style="font-size:.78rem;color:var(--text-muted)">Hoà</span>'}
+      ${ri === 0 && canUndo ? `<button class="btn btn-sm btn-ghost" style="color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:.75rem;margin-left:auto" onclick="undoMatch()">↩ Undo</button>` : ''}
     </div>`;
   }).join('');
 }

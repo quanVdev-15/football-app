@@ -41,8 +41,9 @@ firebase deploy
 ## 7. Weekly Workflow
 
 **Thursday–Friday:**
-- Share `index.html` URL with players
-- Players tap "I'm In" and select their name
+- Share the app URL with players
+- First time: players enter name + phone on login screen
+- Players mark themselves as going
 
 **Friday 8pm:**
 - Admin: Lock RSVP
@@ -54,7 +55,6 @@ firebase deploy
 
 **During the game:**
 - Admin controls rotation on their phone
-- Players/TV show `board.html` — auto-updates live
 
 ## 8. PWA Icons
 
@@ -69,8 +69,8 @@ Use any green football emoji or logo. Tools: https://realfavicongenerator.net
 | URL | Who uses it |
 |-----|-------------|
 | `/` | All players — RSVP |
-| `/board.html` | TV/projector — live match display |
+| `/login.html` | First-time login (name + phone) |
 | `/admin/` | Admin hub (PIN protected) |
-| `/admin/payment.html` | Accountant — mark payments |
+| `/admin/payment.html` | Admin — mark payments |
 | `/admin/teams.html` | Admin — create teams |
 | `/admin/rotation.html` | Admin — run matches |

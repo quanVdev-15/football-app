@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thanh Toán — Bóng Đá Thứ 7</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="app-shell">
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Thanh toán</p>
+      <h1>💰 Tiền sân</h1>
+    </div>
+    <div class="topbar-actions">
+      <a href="/" class="chip-btn">← Về</a>
+    </div>
+  </header>
+
+  <main class="page">
+
+    <!-- Loading -->
+    <section id="loadingState" class="state-card">
+      <div class="spinner"></div>
+      <p>Đang tải...</p>
+    </section>
+
+    <!-- No active session -->
+    <section id="emptyState" class="state-card" hidden>
+      <h2>Không có buổi đá</h2>
+      <p>Chưa có gì để thanh toán.</p>
+      <a href="/" class="primary-link" style="margin-top:14px;text-decoration:none">← Về trang chính</a>
+    </section>
+
+    <!-- Player not in session -->
+    <section id="notGoingState" class="state-card" hidden>
+      <h2>Bạn không tham gia</h2>
+      <p>Bạn chưa đăng ký buổi này nên không cần thanh toán.</p>
+      <a href="/" class="primary-link" style="margin-top:14px;text-decoration:none">← Về đăng ký</a>
+    </section>
+
+    <!-- Main payment content -->
+    <section id="payContent" hidden>
+
+      <!-- Status header card -->
+      <article id="payStatusCard" class="counter-card pay-status-card">
+        <p id="payDateLabel" class="session-date">--</p>
+        <div class="pay-status-row">
+          <span id="payStatusIcon" class="pay-status-icon">⏳</span>
+          <div>
+            <div id="payStatusText" class="pay-status-text">Chưa thanh toán</div>
+            <div id="payStatusSub" class="pay-status-sub">Quét QR hoặc chuyển khoản thủ công</div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Amount display -->
+      <article class="pay-amount-card">
+        <div class="pay-amount-left">
+          <p class="pay-amount-label">Số tiền cần trả</p>
+          <p id="amountDisplay" class="pay-amount-value">35,000đ</p>
+        </div>
+        <div class="pay-amount-icon">⚽</div>
+      </article>
+
+      <!-- QR code section -->
+      <article id="qrCard" class="pay-qr-card" hidden>
+        <p class="pay-qr-label">Quét mã để chuyển khoản</p>
+        <div id="qrWrap" class="pay-qr-wrap">
+          <div class="spinner"></div>
+        </div>
+        <div id="bankDetails" class="pay-bank-details"></div>
+      </article>
+
+      <!-- No bank config set yet -->
+      <article id="noConfigCard" class="state-card" hidden>
+        <p>⚙️ Admin chưa cấu hình tài khoản ngân hàng.</p>
+        <p style="font-size:.85rem;color:var(--muted)">Liên hệ admin để biết tài khoản chuyển khoản.</p>
+      </article>
+
+      <!-- Self-report action -->
+      <div id="selfReportWrap">
+        <button id="selfReportBtn" class="my-rsvp-btn pay-confirm-btn" type="button" onclick="selfReport()">
+          ✅ Tôi đã chuyển khoản
+        </button>
+        <p class="pay-confirm-note">Sau khi nhấn, admin sẽ xác nhận thanh toán của bạn.</p>
+      </div>
+
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script>
+  const IDENTITY_KEY = 'bdt7_player';
+  const PAY_PER_PLAY = 35000;
+
+  // ── Auth gate ──────────────────────────────────────────────────────────────
+  (function guardAuth() {
+    try {
+      const saved = localStorage.getItem(IDENTITY_KEY);
+      if (!saved) { window.location.replace('/login.html'); return; }
+      const p = JSON.parse(saved);
+      if (!p.name || !p.phone) window.location.replace('/login.html');
+    } catch (_) { window.location.replace('/login.html'); }
+  })();
+
+  let session  = null;
+  let payRec   = null;
+  let bankCfg  = null;
+  let identity = null;
+  let unsubPay = null;
+
+  window.addEventListener('DOMContentLoaded', init);
+
+  async function init() {
+    identity = currentIdentity();
+
+    try {
+      session = await getActiveSession();
+      hide('loadingState');
+
+      if (!session) { show('emptyState'); return; }
+
+      // Show session date immediately
+      const d = toDate(session.date || session.saturdayDate || session.id);
+      if (d) document.getElementById('payDateLabel').textContent = fmtDate(d);
+
+      // Check player is going
+      const playerId = identity.playerId || ('ph_' + identity.phone);
+      const rsvpDoc  = await db.collection('sessions').doc(session.id)
+        .collection('rsvps').doc(playerId).get();
+
+      const isGoing = rsvpDoc.exists &&
+        ['in', 'going'].includes(rsvpDoc.data().status || rsvpDoc.data().vote);
+
+      if (!isGoing) { show('notGoingState'); return; }
+
+      // Load bank config
+      const cfgDoc = await db.collection('config').doc('payment').get();
+      bankCfg = cfgDoc.exists ? cfgDoc.data() : null;
+
+      // Ensure payment record exists (idempotent)
+      const payRef = db.collection('sessions').doc(session.id)
+        .collection('payments').doc(playerId);
+      const existingPay = await payRef.get();
+      if (!existingPay.exists) {
+        await payRef.set({
+          playerId,
+          playerName: identity.name || '',
+          phone:      identity.phone || '',
+          type:       'pay-per-play',
+          amount:     PAY_PER_PLAY,
+          paid:       false,
+          paidAt:     null,
+          guestCount: 0,
+          guestAmount: 0,
+          guestPaid:  false,
+          selfReported:   false,
+          selfReportedAt: null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Subscribe to payment record for live status
+      unsubPay = payRef.onSnapshot(doc => {
+        payRec = doc.exists ? doc.data() : null;
+        renderPayment();
+      });
+
+      show('payContent');
+
+    } catch (e) {
+      console.error(e);
+      hide('loadingState');
+      show('emptyState');
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function renderPayment() {
+    if (!payRec) return;
+
+    const card   = document.getElementById('payStatusCard');
+    const icon   = document.getElementById('payStatusIcon');
+    const text   = document.getElementById('payStatusText');
+    const sub    = document.getElementById('payStatusSub');
+    const btn    = document.getElementById('selfReportBtn');
+    const wrap   = document.getElementById('selfReportWrap');
+
+    card.classList.remove('is-paid', 'is-self-reported', 'is-pending');
+
+    if (payRec.paid) {
+      card.classList.add('is-paid');
+      icon.textContent = '✅';
+      text.textContent = 'Đã thanh toán';
+      sub.textContent  = payRec.paidAt
+        ? 'Xác nhận lúc ' + fmtTime(payRec.paidAt.toDate ? payRec.paidAt.toDate() : new Date(payRec.paidAt))
+        : 'Admin đã xác nhận';
+      wrap.hidden = true;
+
+    } else if (payRec.selfReported) {
+      card.classList.add('is-self-reported');
+      icon.textContent = '🔄';
+      text.textContent = 'Chờ xác nhận';
+      sub.textContent  = 'Admin sẽ xác nhận sớm';
+      btn.disabled = true;
+      btn.textContent = '🔄 Đang chờ admin xác nhận';
+      wrap.hidden = false;
+
+    } else {
+      card.classList.add('is-pending');
+      icon.textContent = '⏳';
+      text.textContent = 'Chưa thanh toán';
+      sub.textContent  = 'Quét QR hoặc chuyển khoản thủ công';
+      btn.disabled = false;
+      btn.textContent = '✅ Tôi đã chuyển khoản';
+      wrap.hidden = false;
+    }
+
+    document.getElementById('amountDisplay').textContent = fmtVND(payRec.amount || PAY_PER_PLAY);
+    renderQR();
+  }
+
+  function renderQR() {
+    const qrCard   = document.getElementById('qrCard');
+    const noConfig = document.getElementById('noConfigCard');
+    const qrWrap   = document.getElementById('qrWrap');
+    const bankDiv  = document.getElementById('bankDetails');
+
+    if (!bankCfg || !bankCfg.bankCode || !bankCfg.accountNumber) {
+      qrCard.hidden   = true;
+      noConfig.hidden = false;
+      return;
+    }
+
+    qrCard.hidden   = false;
+    noConfig.hidden = true;
+
+    const d = toDate(session.date || session.saturdayDate || session.id);
+    const dateStr   = d ? d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : '';
+    const addInfo   = `BDThu7 ${identity.name} ${dateStr}`.trim();
+    const amount    = payRec?.amount || PAY_PER_PLAY;
+    const qrUrl     = [
+      `https://img.vietqr.io/image/${encodeURIComponent(bankCfg.bankCode)}`,
+      `-${encodeURIComponent(bankCfg.accountNumber)}-qr_only.jpg`,
+      `?amount=${amount}`,
+      `&addInfo=${encodeURIComponent(addInfo)}`,
+      bankCfg.accountName ? `&accountName=${encodeURIComponent(bankCfg.accountName)}` : '',
+    ].join('');
+
+    qrWrap.innerHTML = `
+      <img src="${qrUrl}" alt="QR chuyển khoản" class="pay-qr-img"
+           onload="this.parentNode.classList.add('loaded')"
+           onerror="this.parentNode.innerHTML='<p class=pay-qr-error>Không tải được QR.<br>Chuyển khoản theo thông tin bên dưới.</p>'">
+    `;
+
+    bankDiv.innerHTML = [
+      bankRow('Ngân hàng',    bankCfg.bankCode,       false),
+      bankRow('Số tài khoản', bankCfg.accountNumber,  true),
+      bankCfg.accountName
+        ? bankRow('Chủ tài khoản', bankCfg.accountName, false)
+        : '',
+      bankRow('Nội dung CK',  addInfo, true),
+    ].join('');
+  }
+
+  function bankRow(label, value, copyable) {
+    const escapedValue = esc(value);
+    return `
+      <div class="pay-bank-row">
+        <span class="pay-bank-label">${esc(label)}</span>
+        <span class="pay-bank-value ${copyable ? 'pay-copyable' : ''}"
+              ${copyable ? `onclick="copyText('${escapedValue}')" role="button" tabindex="0"` : ''}>
+          ${escapedValue}${copyable ? ' <span class="pay-copy-icon">📋</span>' : ''}
+        </span>
+      </div>
+    `;
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  async function selfReport() {
+    const btn = document.getElementById('selfReportBtn');
+    btn.disabled = true;
+    btn.textContent = 'Đang gửi...';
+
+    try {
+      const playerId = identity.playerId || ('ph_' + identity.phone);
+      await db.collection('sessions').doc(session.id)
+        .collection('payments').doc(playerId).update({
+          selfReported:   true,
+          selfReportedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      toast('✅ Đã gửi! Admin sẽ xác nhận sớm.', 'success');
+    } catch (e) {
+      console.error(e);
+      btn.disabled = false;
+      btn.textContent = '✅ Tôi đã chuyển khoản';
+      toast('Có lỗi, thử lại!', 'error');
+    }
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => toast('Đã copy!', 'success'));
+    } else {
+      toast('Không copy được — hãy chép thủ công', 'error');
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function currentIdentity() {
+    try { return JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null'); }
+    catch (_) { return null; }
+  }
+
+  async function getActiveSession() {
+    const config = await db.collection('config').doc('app').get();
+    const sid    = config.exists ? config.data().currentSessionId : null;
+    if (sid) {
+      const doc = await db.collection('sessions').doc(sid).get();
+      if (doc.exists) return { id: doc.id, ...doc.data() };
+    }
+    const latest = await db.collection('sessions').orderBy('date', 'desc').limit(1).get();
+    if (latest.empty) return null;
+    return { id: latest.docs[0].id, ...latest.docs[0].data() };
+  }
+
+  function toDate(value) {
+    if (!value) return null;
+    if (value.toDate) return value.toDate();
+    if (value instanceof Date) return value;
+    return new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
+  }
+
+  function fmtDate(date) {
+    return new Intl.DateTimeFormat('vi-VN', {
+      weekday: 'long', day: '2-digit', month: 'short', year: 'numeric',
+    }).format(date);
+  }
+
+  function fmtTime(date) {
+    return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+
+  function fmtVND(amount) {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
+  }
+
+  function esc(v) {
+    return String(v ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]
+    ));
+  }
+
+  function show(id) { document.getElementById(id).hidden = false; }
+  function hide(id) { document.getElementById(id).hidden = true;  }
+
+  function toast(message, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.className   = `toast show ${type}`;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.className = 'toast'; }, 2800);
+  }
+  </script>
+</body>
+</html>

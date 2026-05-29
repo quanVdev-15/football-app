@@ -1,66 +1,42 @@
 rules_version = '2';
+// TODO: tighten all admin-write rules with Firebase Auth once phone/email auth is added.
+// For now the client enforces a PIN check; Firestore stays open to trusted clients.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Public read: players list (for RSVP dropdown)
+    // ── Players list ───────────────────────────────────────────────────────────
+    // Public read (player name dropdown). Write open so admin can add players.
     match /players/{playerId} {
       allow read: if true;
-      allow write: if true; // Players can self-add; tighten if needed
+      allow write: if true; // TODO: restrict to admin auth
     }
 
-    // Debt tracking (admin writes, public read)
-    match /debts/{debtId} {
-      allow read: if true;
-      allow write: if true;
-    }
-
-    // Public read for config/app (to get currentSessionId)
-    // Write restricted — only trusted clients (no server-side auth here)
+    // ── Config ─────────────────────────────────────────────────────────────────
+    // Public read (to fetch currentSessionId, maxCap).
+    // Write open for now — admin PIN check is enforced on the client.
     match /config/{doc} {
       allow read: if true;
-      allow write: if true; // Tighten with Firebase Auth if you add login later
+      allow write: if true; // TODO: restrict to admin auth
     }
 
-    // Sessions: public read, write allowed for RSVP
+    // ── Sessions ───────────────────────────────────────────────────────────────
     match /sessions/{sessionId} {
+      // Anyone can read session metadata (date, status, maxCap)
       allow read: if true;
+      // TODO: restrict to admin auth
       allow write: if true;
 
-      // RSVPs: anyone can create/update their own RSVP
-      match /rsvps/{rsvpId} {
+      // Votes — anyone can write their own vote (going / not_going)
+      match /votes/{playerName} {
         allow read: if true;
-        allow write: if true;
+        allow write: if true; // cap enforcement is done in app.js client logic
       }
 
-      // Teams, payments, state: restricted to admin in production
-      // For now open for simplicity — tighten with Firebase Auth later
+      // Teams — public read so all players see the result in real-time
       match /teams/{teamId} {
         allow read: if true;
-        allow write: if true;
-      }
-      match /payments/{paymentId} {
-        allow read: if true;
-        allow write: if true;
-      }
-      match /state/{stateDoc} {
-        allow read: if true;
-        allow write: if true;
-      }
-      match /chat/{msgId} {
-        allow read: if true;
-        allow write: if true;
-      }
-      match /reactions/{reactionId} {
-        allow read: if true;
-        allow write: if true;
-      }
-      match /formations/{teamId} {
-        allow read: if true;
-        allow write: if true;
-      }
-      match /trades/{tradeId} {
-        allow read: if true;
-        allow write: if true;
+        allow write: if true; // TODO: restrict to admin auth
       }
     }
   }

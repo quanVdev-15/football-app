@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seed Test Data</title>
+  <style>
+    body { font-family: sans-serif; max-width: 480px; margin: 40px auto; padding: 16px; background: #f1f5f9; }
+    h1 { font-size: 1.2rem; margin-bottom: 4px; }
+    p  { color: #64748b; font-size: .85rem; margin-bottom: 24px; }
+    .btn {
+      display: block; width: 100%; padding: 14px; border: none; border-radius: 12px;
+      font-size: 1rem; font-weight: 700; cursor: pointer; margin-bottom: 12px;
+    }
+    .btn-seed   { background: #16a34a; color: #fff; }
+    .btn-clear  { background: #dc2626; color: #fff; }
+    .btn-rsvp   { background: #2563eb; color: #fff; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    pre {
+      background: #0f172a; color: #94a3b8; padding: 14px; border-radius: 10px;
+      font-size: .78rem; white-space: pre-wrap; max-height: 320px; overflow-y: auto;
+    }
+    .status { margin-bottom: 12px; font-weight: 700; color: #0f172a; }
+  </style>
+</head>
+<body>
+
+<h1>⚽ Test Seed — Bóng Đá Thứ 7</h1>
+<p>Tạo dữ liệu giả để test màn hình đội. Chỉ dùng khi dev.</p>
+
+<button class="btn btn-seed" id="btnSeed" onclick="seedTeams()">🌱 Seed: 21 players + 3 teams (status = teams)</button>
+<button class="btn btn-rsvp" id="btnRsvp" onclick="seedRsvpOnly()">📋 Seed: RSVP only (status = rsvp, no teams)</button>
+<button class="btn btn-clear" id="btnClear" onclick="clearData()">🗑️ Clear session + teams + rsvps</button>
+
+<div class="status" id="status">Ready.</div>
+<pre id="log">—</pre>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script>
+const SESSION_ID = 'test-2026-05-30';
+
+// ─── Player pool ──────────────────────────────────────────────────────────────
+const PLAYERS = [
+  // Team Đỏ (red) — 7 players, first is GK
+  { id: 'ph_0901000001', name: 'Nguyễn Văn An',    phone: '0901000001', isGK: true  },
+  { id: 'ph_0901000002', name: 'Trần Minh Đức',    phone: '0901000002', isGK: false },
+  { id: 'ph_0901000003', name: 'Lê Hoàng Nam',     phone: '0901000003', isGK: false },
+  { id: 'ph_0901000004', name: 'Phạm Quốc Hùng',   phone: '0901000004', isGK: false },
+  { id: 'ph_0901000005', name: 'Võ Thành Long',    phone: '0901000005', isGK: false },
+  { id: 'ph_0901000006', name: 'Đặng Văn Bình',    phone: '0901000006', isGK: false },
+  { id: 'ph_0901000007', name: 'Hoàng Đức Thắng',  phone: '0901000007', isGK: false },
+  // Team Xanh (blue) — 7 players, first is GK
+  { id: 'ph_0902000001', name: 'Nguyễn Trọng Tài', phone: '0902000001', isGK: true  },
+  { id: 'ph_0902000002', name: 'Trần Văn Khoa',    phone: '0902000002', isGK: false },
+  { id: 'ph_0902000003', name: 'Lê Minh Tuấn',     phone: '0902000003', isGK: false },
+  { id: 'ph_0902000004', name: 'Phạm Văn Hiếu',    phone: '0902000004', isGK: false },
+  { id: 'ph_0902000005', name: 'Võ Minh Khải',     phone: '0902000005', isGK: false },
+  { id: 'ph_0902000006', name: 'Đặng Hoàng Vũ',    phone: '0902000006', isGK: false },
+  { id: 'ph_0902000007', name: 'Hoàng Văn Tùng',   phone: '0902000007', isGK: false },
+  // Team Vàng (green) — 7 players, first is GK
+  { id: 'ph_0903000001', name: 'Nguyễn Đức Mạnh',  phone: '0903000001', isGK: true  },
+  { id: 'ph_0903000002', name: 'Trần Hoàng Phúc',  phone: '0903000002', isGK: false },
+  { id: 'ph_0903000003', name: 'Lê Văn Quang',     phone: '0903000003', isGK: false },
+  { id: 'ph_0903000004', name: 'Phạm Minh Châu',   phone: '0903000004', isGK: false },
+  { id: 'ph_0903000005', name: 'Võ Văn Hải',       phone: '0903000005', isGK: false },
+  { id: 'ph_0903000006', name: 'Đặng Trung Kiên',  phone: '0903000006', isGK: false },
+  { id: 'ph_0903000007', name: 'Hoàng Minh Tiến',  phone: '0903000007', isGK: false },
+];
+
+const TEAMS_DEF = [
+  {
+    id: 'team_0',
+    name: 'Đội Đỏ',
+    color: 'red',
+    playerRange: [0, 7],   // indices into PLAYERS
+    subs: []
+  },
+  {
+    id: 'team_1',
+    name: 'Đội Xanh',
+    color: 'blue',
+    playerRange: [7, 14],
+    subs: []
+  },
+  {
+    id: 'team_2',
+    name: 'Đội Vàng',
+    color: 'green',
+    playerRange: [14, 21],
+    subs: []
+  },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function log(msg) {
+  document.getElementById('log').textContent += '\n' + msg;
+  document.getElementById('log').scrollTop = 9999;
+}
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+function setLoading(on) {
+  ['btnSeed','btnRsvp','btnClear'].forEach(id => {
+    document.getElementById(id).disabled = on;
+  });
+}
+
+function nextSaturdayDate() {
+  const d = new Date('2026-05-30');
+  return d;
+}
+
+// ─── Seed teams mode ──────────────────────────────────────────────────────────
+async function seedTeams() {
+  setLoading(true);
+  document.getElementById('log').textContent = '';
+  setStatus('Seeding...');
+
+  try {
+    const batch = db.batch();
+    const satDate = nextSaturdayDate();
+
+    // 1. Write session
+    const sessRef = db.collection('sessions').doc(SESSION_ID);
+    batch.set(sessRef, {
+      date: firebase.firestore.Timestamp.fromDate(satDate),
+      saturdayDate: SESSION_ID,
+      status: 'teams',
+      rsvpCap: 21,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    log('✅ Session: ' + SESSION_ID + ' (status=teams)');
+
+    // 2. Point config to this session
+    batch.set(db.collection('config').doc('app'), { currentSessionId: SESSION_ID }, { merge: true });
+    log('✅ config.currentSessionId → ' + SESSION_ID);
+
+    // 3. Write RSVPs
+    PLAYERS.forEach(p => {
+      batch.set(sessRef.collection('rsvps').doc(p.id), {
+        playerId: p.id,
+        playerName: p.name,
+        phone: p.phone,
+        status: 'in',
+        vote: 'going',
+        isGoalkeeper: p.isGK,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    log('✅ RSVPs: ' + PLAYERS.length + ' players written');
+
+    // 4. Delete any old team docs
+    const oldSnap = await sessRef.collection('teams').get();
+    oldSnap.docs.forEach(d => batch.delete(d.ref));
+    if (oldSnap.size) log('🗑️ Cleared ' + oldSnap.size + ' old team doc(s)');
+
+    // 5. Write 3 teams
+    TEAMS_DEF.forEach(td => {
+      const slice = PLAYERS.slice(td.playerRange[0], td.playerRange[1]);
+      const players = slice.map(p => ({ id: p.id, name: p.name, isGK: p.isGK }));
+      batch.set(sessRef.collection('teams').doc(td.id), {
+        name: td.name,
+        color: td.color,
+        players,
+        subs: td.subs,
+        wins: 0,
+        losses: 0,
+        consecutiveWins: 0,
+        tradeUsed: false,
+      });
+      log('✅ Team ' + td.name + ': ' + players.map(p => p.name + (p.isGK ? ' 🧤' : '')).join(', '));
+    });
+
+    await batch.commit();
+    setStatus('✅ Done! Open / to see teams.');
+    log('\nOpen http://localhost:8000 and check the teams screen.');
+    log('To test "your team" highlight, set localStorage:');
+    log('  localStorage.setItem("bdt7_player", JSON.stringify({name:"Trần Minh Đức",phone:"0901000002",playerId:"ph_0901000002"}))');
+
+  } catch (e) {
+    setStatus('❌ Error: ' + e.message);
+    log('ERROR: ' + e.message);
+    console.error(e);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ─── Seed RSVP-only mode ──────────────────────────────────────────────────────
+async function seedRsvpOnly() {
+  setLoading(true);
+  document.getElementById('log').textContent = '';
+  setStatus('Seeding RSVP-only...');
+
+  try {
+    const batch = db.batch();
+    const satDate = nextSaturdayDate();
+    const sessRef = db.collection('sessions').doc(SESSION_ID);
+
+    batch.set(sessRef, {
+      date: firebase.firestore.Timestamp.fromDate(satDate),
+      saturdayDate: SESSION_ID,
+      status: 'rsvp',
+      rsvpCap: 21,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection('config').doc('app'), { currentSessionId: SESSION_ID }, { merge: true });
+
+    // Only write 14 RSVPs so 7 spots are still open
+    const partial = PLAYERS.slice(0, 14);
+    partial.forEach(p => {
+      batch.set(sessRef.collection('rsvps').doc(p.id), {
+        playerId: p.id,
+        playerName: p.name,
+        phone: p.phone,
+        status: 'in',
+        vote: 'going',
+        isGoalkeeper: p.isGK,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+    setStatus('✅ Done! status=rsvp, 14/21 going.');
+    log('✅ Session seeded: status=rsvp, 14/21 players going, 7 spots open.');
+    log('Open http://localhost:8000 to test the poll / RSVP screen.');
+
+  } catch (e) {
+    setStatus('❌ Error: ' + e.message);
+    log('ERROR: ' + e.message);
+    console.error(e);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ─── Clear ─────────────────────────────────────────────────────────────────────
+async function clearData() {
+  if (!confirm('Delete session ' + SESSION_ID + ' and all sub-collections?')) return;
+  setLoading(true);
+  document.getElementById('log').textContent = '';
+  setStatus('Clearing...');
+
+  try {
+    const sessRef = db.collection('sessions').doc(SESSION_ID);
+
+    // Delete RSVPs
+    const rsvpSnap = await sessRef.collection('rsvps').get();
+    const batch1 = db.batch();
+    rsvpSnap.docs.forEach(d => batch1.delete(d.ref));
+    await batch1.commit();
+    log('🗑️ Deleted ' + rsvpSnap.size + ' RSVP doc(s)');
+
+    // Delete teams
+    const teamsSnap = await sessRef.collection('teams').get();
+    const batch2 = db.batch();
+    teamsSnap.docs.forEach(d => batch2.delete(d.ref));
+    await batch2.commit();
+    log('🗑️ Deleted ' + teamsSnap.size + ' team doc(s)');
+
+    // Delete session
+    await sessRef.delete();
+    log('🗑️ Deleted session: ' + SESSION_ID);
+
+    // Clear config pointer if it points here
+    const cfg = await db.collection('config').doc('app').get();
+    if (cfg.exists && cfg.data().currentSessionId === SESSION_ID) {
+      await db.collection('config').doc('app').update({ currentSessionId: firebase.firestore.FieldValue.delete() });
+      log('🗑️ Cleared config.currentSessionId');
+    }
+
+    setStatus('✅ Cleared. App will show empty state.');
+  } catch (e) {
+    setStatus('❌ Error: ' + e.message);
+    log('ERROR: ' + e.message);
+    console.error(e);
+  } finally {
+    setLoading(false);
+  }
+}
+</script>
+</body>
+</html>

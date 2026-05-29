@@ -1,3 +1,6 @@
+// firebase-config.js — Firebase initialisation + offline persistence
+// Uses Firebase v9 compat SDK loaded via CDN (window.firebase global)
+
 const firebaseConfig = {
   apiKey: "AIzaSyAciGWtEvo8pd_Y-GNfUq9cea0j67rSHbQ",
   authDomain: "football7-a553e.firebaseapp.com",
@@ -8,10 +11,15 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+
+/** @type {firebase.firestore.Firestore} */
 const db = firebase.firestore();
 
-// Enable offline persistence
+// Enable multi-tab offline persistence
 db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-  if (err.code === 'failed-precondition') console.warn('Persistence failed: multiple tabs open');
-  else if (err.code === 'unimplemented') console.warn('Persistence not available in this browser');
+  if (err.code === 'failed-precondition') {
+    console.warn('[firebase-config] Persistence skipped: multiple tabs open');
+  } else if (err.code === 'unimplemented') {
+    console.warn('[firebase-config] Persistence not supported in this browser');
+  }
 });
