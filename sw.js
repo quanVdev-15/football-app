@@ -1,9 +1,11 @@
-const CACHE = 'football-v5';
+const CACHE = 'football-v6';
 const STATIC = [
   '/',
   '/index.html',
   '/login.html',
   '/payment.html',
+  '/admin/monthly.html',
+  '/admin/payment.html',
   '/css/style.css',
   '/js/firebase-config.js',
   '/js/utils.js',

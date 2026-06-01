@@ -3,503 +3,602 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Thanh Toán — Admin</title>
+  <title>Chốt thanh toán - Admin</title>
   <meta name="theme-color" content="#1b4332">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
-
-<header class="app-header">
-  <h1>💰 Thanh toán</h1>
-  <div class="header-right">
-    <a href="/admin/" class="admin-link">← Hub</a>
-  </div>
-</header>
-
-<main class="container" id="adminContent" style="display:none">
-
-  <!-- Summary card -->
-  <div class="card" id="summaryCard">
-    <div class="card-header">
-      <span class="card-title" id="summaryDate">Hôm nay</span>
-      <button class="btn btn-sm btn-ghost" onclick="refreshData()">🔄</button>
+<body class="app-shell admin-page">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1>Chốt thanh toán</h1>
+      <p id="sessionDateLabel" class="subtle">--</p>
     </div>
-    <div id="summaryBody">
-      <div class="loading"><div class="spinner"></div></div>
+    <div class="topbar-actions">
+      <a href="/admin/" class="chip-btn">Hub</a>
     </div>
-  </div>
+  </header>
 
-  <!-- Outstanding debts from previous sessions -->
-  <div id="debtSection" style="display:none" class="card">
-    <div class="card-header">
-      <span class="card-title">🔴 Nợ từ tuần trước</span>
-      <span class="badge badge-red" id="debtCount">0</span>
-    </div>
-    <div id="debtList"></div>
-  </div>
+  <main id="adminContent" class="page" hidden>
+    <section id="loadingState" class="state-card">
+      <div class="spinner"></div>
+      <p>Đang tải...</p>
+    </section>
 
-  <!-- Pending confirmations -->
-  <div id="pendingSection" style="display:none" class="card">
-    <div class="card-header">
-      <span class="card-title">⏳ Chờ xác nhận</span>
-      <span class="badge badge-yellow" id="pendingCount">0</span>
-    </div>
-    <div id="pendingList"></div>
-  </div>
+    <section id="emptyState" class="state-card" hidden>
+      <h2>Chưa có buổi đá</h2>
+      <p>Không tìm thấy buổi đá để chốt thanh toán.</p>
+    </section>
 
-  <!-- Search bar -->
-  <div class="form-group" style="margin-bottom:12px">
-    <input type="search" id="paymentSearch" class="form-input" 
-           placeholder="🔍 Tìm tên cầu thủ..." 
-           oninput="filterPaymentList(this.value)">
-  </div>
-
-  <!-- Tabs: Per-play / Subscribers / Guests -->
-  <div class="tabs">
-    <button class="tab active" id="tab-ppp" onclick="switchTab('ppp')">Trả theo buổi</button>
-    <button class="tab" id="tab-sub" onclick="switchTab('sub')">Thành viên</button>
-    <button class="tab" id="tab-guest" onclick="switchTab('guest')">Khách</button>
-  </div>
-
-  <!-- Player payment list -->
-  <div id="paymentList">
-    <div class="loading"><div class="spinner"></div></div>
-  </div>
-
-  <!-- Close session payments -->
-  <div class="card" id="closePayCard" style="display:none">
-    <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:10px">
-      Khi buổi đá kết thúc, nhấn nút này để ghi nợ cho những người chưa trả. Họ sẽ được nhắc nhở buổi tiếp theo.
-    </div>
-    <button class="btn btn-danger btn-block" onclick="closeAndCarryDebt()">
-      📋 Đóng thanh toán &amp; Ghi nợ người chưa trả
-    </button>
-  </div>
-
-</main>
-
-<div class="toast" id="toast"></div>
-
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-<script src="/js/firebase-config.js"></script>
-<script src="/js/utils.js"></script>
-<script src="/js/admin-auth.js"></script>
-<script>
-// ─── Payment constants & formatters ──────────────────────────────────────────
-const PAY_PER_PLAY = 35000; // VND per session — change here to update everywhere
-
-function fmtVND(amount) {
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
-}
-
-function fmtTime(date) {
-  if (!date) return '—';
-  return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(date);
-}
-
-function fmtDate(date) {
-  if (!date) return '—';
-  return new Intl.DateTimeFormat('vi-VN', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  }).format(date);
-}
-
-// ─── Page state ───────────────────────────────────────────────────────────────
-let session = null;
-let rsvps = {};
-let payments = {};
-let players = {};
-let currentTab = 'ppp';
-let unsubPayments = null;
-let paymentSearchTerm = '';
-
-function filterPaymentList(term) {
-  paymentSearchTerm = term.toLowerCase().trim();
-  renderTab();
-}
-
-window.addEventListener('DOMContentLoaded', () => requireAuth(initPayment));
-
-async function initPayment() {
-  document.getElementById('adminContent').style.display = '';
-  await loadData();
-  await loadDebts();
-}
-
-async function loadData() {
-  session = await getActiveSession();
-  if (!session) {
-    document.getElementById('summaryBody').innerHTML = '<p style="color:var(--text-muted)">Chưa có buổi đá</p>';
-    return;
-  }
-
-  // Load players map once
-  const pSnap = await db.collection('players').get();
-  pSnap.docs.forEach(d => { players[d.id] = d.data(); });
-
-  // Subscribe to RSVPs live — handles late RSVPs and cancellations automatically
-  subscribeRsvps();
-  subscribePayments();
-}
-
-function subscribeRsvps() {
-  db.collection('sessions').doc(session.id)
-    .collection('rsvps')
-    .onSnapshot(async snap => {
-      rsvps = {};
-      snap.docs.forEach(d => { rsvps[d.id] = d.data(); });
-      await syncPayments();
-    });
-}
-
-function subscribePayments() {
-  if (unsubPayments) unsubPayments();
-  unsubPayments = db.collection('sessions').doc(session.id)
-    .collection('payments')
-    .onSnapshot(snap => {
-      payments = {};
-      snap.docs.forEach(d => { payments[d.id] = d.data(); });
-      renderSummary();
-      renderTab();
-      renderPending();
-    });
-}
-
-function renderPending() {
-  const pending = Object.values(payments).filter(p => p.selfReported && !p.paid);
-  const section = document.getElementById('pendingSection');
-  const countEl = document.getElementById('pendingCount');
-  const listEl = document.getElementById('pendingList');
-
-  if (!pending.length) {
-    section.style.display = 'none';
-    return;
-  }
-
-  section.style.display = '';
-  countEl.textContent = pending.length;
-  pending.sort((a, b) => {
-    const ta = a.selfReportedAt?.seconds || 0;
-    const tb = b.selfReportedAt?.seconds || 0;
-    return tb - ta; // newest first
-  });
-
-  listEl.innerHTML = pending.map(p => `
-    <div class="check-row" style="background:rgba(249,168,37,.08);border-radius:8px;margin-bottom:6px;padding:10px 12px">
-      <div style="flex:1">
-        <div class="check-label" style="font-weight:700">${esc(p.playerName)}</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">
-          Báo lúc ${p.selfReportedAt ? fmtTime(p.selfReportedAt.toDate ? p.selfReportedAt.toDate() : new Date(p.selfReportedAt)) : '—'}
+    <section id="paymentContent" hidden>
+      <article class="pay-hero-panel">
+        <div class="section-head compact">
+          <div>
+            <h2>Tổng kết</h2>
+            <p id="summarySessionDate">--</p>
+          </div>
+          <span id="closedBadge" class="status-badge is-open">Đang chốt</span>
         </div>
-      </div>
-      <span style="font-weight:700;margin-right:10px">${fmtVND(p.amount + (p.guestAmount || 0))}</span>
-      <button class="btn btn-sm btn-success" onclick="confirmPayment('${p.playerId}')">✓ Xác nhận</button>
-    </div>
-  `).join('');
-}
+        <div class="pay-summary-grid">
+          <div>
+            <span>Cần thu</span>
+            <strong id="totalExpected">0 ₫</strong>
+          </div>
+          <div>
+            <span>Đã thu</span>
+            <strong id="totalCollected">0 ₫</strong>
+          </div>
+          <div>
+            <span>Còn lại</span>
+            <strong id="totalOutstanding">0 ₫</strong>
+          </div>
+        </div>
+      </article>
 
-async function confirmPayment(playerId) {
-  const p = payments[playerId];
-  if (!p) return;
-  await db.collection('sessions').doc(session.id).collection('payments').doc(playerId).update({
-    paid: true,
-    paidAt: firebase.firestore.FieldValue.serverTimestamp(),
-    guestPaid: (p.guestCount || 0) > 0 ? true : p.guestPaid
-  });
-  // Update local and re-render handled by onSnapshot
-}
+      <section class="pay-focus-grid">
+        <button class="pay-focus-card danger" type="button" onclick="scrollToSection('unpaidSection')">
+          <span>Chưa trả</span>
+          <strong id="unpaidCount">0</strong>
+          <small id="unpaidTotal">0 ₫</small>
+        </button>
+        <button class="pay-focus-card warning" type="button" onclick="scrollToSection('pendingSection')">
+          <span>Chờ CK</span>
+          <strong id="pendingCount">0</strong>
+          <small id="pendingTotal">0 ₫</small>
+        </button>
+        <button class="pay-focus-card ok" type="button" onclick="scrollToSection('archiveSection')">
+          <span>Đã xong</span>
+          <strong id="doneCount">0</strong>
+          <small id="doneTotal">0 ₫</small>
+        </button>
+      </section>
 
-async function syncPayments() {
-  const batch = db.batch();
-  let changed = false;
+      <section id="unpaidSection" class="pay-panel">
+        <div class="pay-panel-head">
+          <div>
+            <h2>🔴 Cần thu ngay</h2>
+            <p>Ưu tiên người có nợ cũ, sau đó tiền buổi.</p>
+          </div>
+          <span id="unpaidPanelCount" class="pill">0</span>
+        </div>
+        <div id="unpaidList" class="pay-row-list"></div>
+      </section>
 
-  // Remove payment entries for players who cancelled their RSVP
-  Object.keys(payments).forEach(pid => {
-    const rsvp = rsvps[pid];
-    if (!rsvp || rsvp.status !== 'in') {
-      const ref = db.collection('sessions').doc(session.id).collection('payments').doc(pid);
-      batch.delete(ref);
-      delete payments[pid];
-      changed = true;
+      <section id="pendingSection" class="pay-panel">
+        <div class="pay-panel-head">
+          <div>
+            <h2>Chờ xác nhận</h2>
+            <p>Người chơi đã báo chuyển khoản.</p>
+          </div>
+          <span id="pendingPanelCount" class="pill">0</span>
+        </div>
+        <div id="pendingList" class="pay-row-list"></div>
+      </section>
+
+      <section id="archiveSection" class="pay-archive-grid">
+        <button class="pay-archive-card" type="button" onclick="toggleSection('monthlyList')">
+          <span>Thành viên tháng</span>
+          <strong id="monthlyCount">0</strong>
+          <small>Chạm để xem</small>
+        </button>
+        <button class="pay-archive-card" type="button" onclick="toggleSection('paidList')">
+          <span>Đã trả</span>
+          <strong id="paidCount">0</strong>
+          <small>Chạm để xem</small>
+        </button>
+      </section>
+
+      <div id="monthlyList" class="pay-row-list pay-archive-list" hidden></div>
+      <div id="paidList" class="pay-row-list pay-archive-list" hidden></div>
+
+      <button id="closeBtn" class="btn btn-danger btn-block pay-close-btn" type="button" onclick="closeAndCarryDebt()">
+        Đóng thanh toán &amp; Ghi nợ
+      </button>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/admin-auth.js"></script>
+  <script>
+  const PAY_PER_PLAY = 35000;
+  const PAY_MONTHLY = 150000;
+  const VISIBLE_ACTION_ROWS = 5;
+
+  let session = null;
+  let sessionId = null;
+  let monthKey = '';
+  let rsvps = {};
+  let payments = {};
+  let subscriptions = {};
+  let activeDebts = [];
+  let unsubRsvps = null;
+  let unsubPayments = null;
+  let unsubDebts = null;
+  let unsubSubs = null;
+  let syncTimer = null;
+
+  window.addEventListener('DOMContentLoaded', () => requireAuth(initPaymentAdmin));
+
+  async function initPaymentAdmin() {
+    document.getElementById('adminContent').hidden = false;
+    session = await loadTargetSession();
+    hide('loadingState');
+
+    if (!session) {
+      show('emptyState');
+      return;
     }
-  });
 
-  // Create or repair payment entries for 'in' RSVPs
-  Object.entries(rsvps).forEach(([pid, r]) => {
-    if (r.status !== 'in') return;
-    const existing = payments[pid];
-    // Skip if already a fully-formed record (has type field)
-    if (existing && existing.type) return;
+    sessionId = session.id;
+    const sessionDate = toDate(session.date || session.saturdayDate || session.id);
+    monthKey = monthFromDate(sessionDate || new Date());
+    document.getElementById('sessionDateLabel').textContent = sessionDate ? fmtDate(sessionDate) : '--';
+    document.getElementById('summarySessionDate').textContent = sessionDate ? fmtDate(sessionDate) : '--';
+    document.getElementById('paymentContent').hidden = false;
 
-    const isSub = r.isSubscriber;
-    const amount = isSub ? 0 : PAY_PER_PLAY;
-    const validGuests = (r.guests || []).filter(g => g.name?.trim());
-    const guestAmt = validGuests.length * PAY_PER_PLAY;
-    const ref = db.collection('sessions').doc(session.id).collection('payments').doc(pid);
-    const data = {
-      playerId: pid,
-      playerName: r.playerName,
-      type: isSub ? 'subscriber' : 'pay-per-play',
-      amount,
-      paid: existing?.paid || isSub,
-      paidAt: existing?.paidAt || (isSub ? firebase.firestore.Timestamp.now() : null),
-      guestCount: validGuests.length,
-      guestAmount: guestAmt,
-      guestPaid: existing?.guestPaid || false,
-      // preserve self-report fields if player already reported
-      ...(existing?.selfReported ? { selfReported: true, selfReportedAt: existing.selfReportedAt } : {})
-    };
-    batch.set(ref, data);
-    payments[pid] = data;
-    changed = true;
-  });
-
-  if (changed) await batch.commit();
-}
-
-function renderSummary() {
-  const satDate = session.date.toDate ? session.date.toDate() : new Date(session.date);
-  document.getElementById('summaryDate').textContent = fmtDate(satDate);
-
-  const inRsvps = Object.values(rsvps).filter(r => r.status === 'in');
-  const pppPlayers = Object.values(payments).filter(p => p.type === 'pay-per-play');
-  const subPlayers = Object.values(payments).filter(p => p.type === 'subscriber');
-  const totalGuests = Object.values(payments).reduce((sum, p) => sum + (p.guestCount || 0), 0);
-
-  const pppTotal = pppPlayers.reduce((sum, p) => sum + p.amount, 0);
-  const guestTotal = Object.values(payments).reduce((sum, p) => sum + (p.guestAmount || 0), 0);
-  const grandTotal = pppTotal + guestTotal;
-
-  const pppPaid = pppPlayers.filter(p => p.paid).reduce((sum, p) => sum + p.amount, 0);
-  const guestPaid = Object.values(payments).filter(p => p.guestPaid).reduce((sum, p) => sum + (p.guestAmount || 0), 0);
-  const totalPaid = pppPaid + guestPaid;
-
-  document.getElementById('summaryBody').innerHTML = `
-    <div class="summary-row">
-      <span class="summary-label">Tổng cầu thủ đăng ký</span>
-      <span class="summary-value">${inRsvps.length} người</span>
-    </div>
-    <div class="summary-row">
-      <span class="summary-label">⭐ Thành viên tháng (miễn phí)</span>
-      <span class="summary-value">${subPlayers.length} người</span>
-    </div>
-    <div class="summary-row">
-      <span class="summary-label">💵 Trả theo buổi (${fmtVND(PAY_PER_PLAY)}/người)</span>
-      <span class="summary-value">${pppPlayers.length} người = ${fmtVND(pppTotal)}</span>
-    </div>
-    <div class="summary-row">
-      <span class="summary-label">👥 Khách (${fmtVND(PAY_PER_PLAY)}/người)</span>
-      <span class="summary-value">${totalGuests} người = ${fmtVND(guestTotal)}</span>
-    </div>
-    <div class="summary-total">
-      <span>TỔNG CẦN THU</span>
-      <span>${fmtVND(grandTotal)}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.85rem">
-      <span style="color:var(--success);font-weight:700">✅ Đã thu: ${fmtVND(totalPaid)}</span>
-      <span style="color:var(--danger);font-weight:700">⏳ Còn lại: ${fmtVND(grandTotal - totalPaid)}</span>
-    </div>
-  `;
-}
-
-function switchTab(tab) {
-  currentTab = tab;
-  ['ppp', 'sub', 'guest'].forEach(t => {
-    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
-  });
-  renderTab();
-}
-
-function renderTab() {
-  const list = document.getElementById('paymentList');
-  const payArr = Object.values(payments);
-
-  let items = [];
-  if (currentTab === 'ppp') {
-    items = payArr.filter(p => p.type === 'pay-per-play');
-  } else if (currentTab === 'sub') {
-    items = payArr.filter(p => p.type === 'subscriber');
-  } else if (currentTab === 'guest') {
-    items = payArr.filter(p => p.guestCount > 0);
+    subscribeRsvps();
+    subscribePayments();
+    subscribeDebts();
+    subscribeSubscriptions();
   }
 
-  items.sort((a, b) => a.playerName.localeCompare(b.playerName));
-
-  if (!items.length) {
-    list.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div><p>Không có ai trong danh sách này</p></div>';
-    return;
+  async function loadTargetSession() {
+    const params = new URLSearchParams(location.search);
+    const sid = params.get('sessionId');
+    if (sid) {
+      const doc = await db.collection('sessions').doc(sid).get();
+      return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    }
+    return getActiveSession();
   }
 
-  if (currentTab === 'ppp') {
-    list.innerHTML = items.map(p => renderPayRow(p)).join('');
-  } else if (currentTab === 'sub') {
-    list.innerHTML = items.map(p => {
-      if (paymentSearchTerm && !p.playerName.toLowerCase().includes(paymentSearchTerm)) {
-        return '';
+  function subscribeRsvps() {
+    if (unsubRsvps) unsubRsvps();
+    unsubRsvps = db.collection('sessions').doc(sessionId).collection('rsvps')
+      .onSnapshot(snap => {
+        rsvps = {};
+        snap.docs.forEach(doc => { rsvps[doc.id] = { id: doc.id, ...doc.data() }; });
+        scheduleSync();
+      });
+  }
+
+  function subscribePayments() {
+    if (unsubPayments) unsubPayments();
+    unsubPayments = db.collection('sessions').doc(sessionId).collection('payments')
+      .onSnapshot(snap => {
+        payments = {};
+        snap.docs.forEach(doc => { payments[doc.id] = { id: doc.id, ...doc.data() }; });
+        renderAll();
+        scheduleSync();
+      });
+  }
+
+  function subscribeDebts() {
+    if (unsubDebts) unsubDebts();
+    unsubDebts = db.collection('debts').where('cleared', '==', false)
+      .onSnapshot(snap => {
+        activeDebts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(debt => debt.sessionId !== sessionId);
+        renderAll();
+        scheduleSync();
+      });
+  }
+
+  function subscribeSubscriptions() {
+    if (unsubSubs) unsubSubs();
+    unsubSubs = db.collection('subscriptions').where('month', '==', monthKey)
+      .onSnapshot(snap => {
+        subscriptions = {};
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.paid === true) subscriptions[data.playerId] = { id: doc.id, ...data };
+        });
+        scheduleSync();
+      });
+  }
+
+  function scheduleSync() {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncPayments, 120);
+  }
+
+  async function syncPayments() {
+    if (!sessionId) return;
+    const batch = db.batch();
+    let changed = false;
+
+    Object.entries(payments).forEach(([pid, payment]) => {
+      if (!isGoing(rsvps[pid])) {
+        batch.delete(db.collection('sessions').doc(sessionId).collection('payments').doc(pid));
+        changed = true;
       }
-      return `
-      <div class="check-row checked" style="cursor:default">
-        <div style="width:17px;height:17px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;flex-shrink:0">✓</div>
-        <span class="check-label">${esc(p.playerName)}</span>
-        <span class="check-amount" style="color:var(--success)">⭐ Miễn phí</span>
-      </div>
-    `}).join('');
-  } else if (currentTab === 'guest') {
-    list.innerHTML = items.map(p => {
-      // Apply search filter to guest section too
-      if (paymentSearchTerm && !p.playerName.toLowerCase().includes(paymentSearchTerm)) {
-        return '';
-      }
-      return `
-      <div class="card" style="margin-bottom:8px">
-        <div style="font-weight:700;margin-bottom:8px">${esc(p.playerName)} <span style="font-size:.8rem;color:var(--text-muted)">+${p.guestCount} khách</span></div>
-        <div class="check-row ${p.guestPaid ? 'checked' : ''}" onclick="toggleGuestPaid('${p.playerId}')">
-          <input type="checkbox" ${p.guestPaid ? 'checked' : ''} onclick="event.stopPropagation();toggleGuestPaid('${p.playerId}')">
-          <span class="check-label">${p.guestCount} khách × ${fmtVND(PAY_PER_PLAY)}</span>
-          <span class="check-amount">${fmtVND(p.guestAmount)}</span>
-        </div>
-      </div>
-    `}).join('');
-  }
-}
-
-function renderPayRow(p) {
-  // Apply search filter
-  if (paymentSearchTerm && !p.playerName.toLowerCase().includes(paymentSearchTerm)) {
-    return '';
-  }
-  
-  return `<div class="check-row ${p.paid ? 'checked' : ''}" id="pay-${p.playerId}" onclick="togglePaid('${p.playerId}')">
-    <input type="checkbox" ${p.paid ? 'checked' : ''} onclick="event.stopPropagation();togglePaid('${p.playerId}')">
-    <div style="flex:1">
-      <div class="check-label">${esc(p.playerName)}</div>
-      ${p.paid && p.paidAt ? `<div style="font-size:.75rem;color:var(--success)">${fmtTime(p.paidAt.toDate ? p.paidAt.toDate() : new Date(p.paidAt))}</div>` : ''}
-    </div>
-    <span class="check-amount">${fmtVND(p.amount)}</span>
-  </div>`;
-}
-
-async function togglePaid(playerId) {
-  const p = payments[playerId];
-  if (!p) return;
-  const nowPaid = !p.paid;
-  p.paid = nowPaid;
-  p.paidAt = nowPaid ? firebase.firestore.Timestamp.now() : null;
-
-  await db.collection('sessions').doc(session.id).collection('payments').doc(playerId).update({
-    paid: nowPaid,
-    paidAt: nowPaid ? firebase.firestore.FieldValue.serverTimestamp() : null
-  });
-
-  renderSummary();
-  renderTab();
-}
-
-async function toggleGuestPaid(playerId) {
-  const p = payments[playerId];
-  if (!p) return;
-  p.guestPaid = !p.guestPaid;
-
-  await db.collection('sessions').doc(session.id).collection('payments').doc(playerId).update({
-    guestPaid: p.guestPaid
-  });
-
-  renderSummary();
-  renderTab();
-}
-
-async function refreshData() {
-  await syncPayments();
-  showToast('Đã đồng bộ danh sách!', 'success');
-}
-
-// ─── Debt tracking ────────────────────────────────────────────────────────────
-async function loadDebts() {
-  const snap = await db.collection('debts')
-    .where('cleared', '==', false)
-    .orderBy('createdAt', 'desc')
-    .get();
-
-  const debts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  // Filter out debts from current session
-  const active = debts.filter(d => d.sessionId !== session?.id);
-
-  const section = document.getElementById('debtSection');
-  const countEl = document.getElementById('debtCount');
-  const listEl = document.getElementById('debtList');
-
-  if (!active.length) { section.style.display = 'none'; return; }
-
-  section.style.display = '';
-  countEl.textContent = active.length;
-
-  listEl.innerHTML = active.map(d => `
-    <div class="check-row" style="background:rgba(229,57,53,.07);border-radius:8px;margin-bottom:6px;padding:10px 12px">
-      <div style="flex:1">
-        <div class="check-label" style="font-weight:700">${esc(d.playerName)}</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">
-          Buổi ${d.sessionDate || d.sessionId} · ${fmtVND(d.amount)}
-        </div>
-      </div>
-      <button class="btn btn-sm btn-success" onclick="clearDebt('${d.id}', '${d.playerId}')">✓ Đã trả</button>
-    </div>
-  `).join('');
-
-  // Show close button when session is playing or done
-  if (session && (session.status === 'playing' || session.status === 'done')) {
-    document.getElementById('closePayCard').style.display = '';
-  }
-}
-
-async function clearDebt(debtId, playerId) {
-  await db.collection('debts').doc(debtId).update({
-    cleared: true,
-    clearedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    clearedSessionId: session?.id || null
-  });
-  showToast('Đã xoá nợ!', 'success');
-  await loadDebts();
-}
-
-async function closeAndCarryDebt() {
-  // Collect anyone with an outstanding balance:
-  // - pay-per-play players who haven't paid their own fee
-  // - anyone (including subscribers) with unpaid guest fees
-  const debtors = Object.values(payments).filter(p => {
-    const owesOwn   = p.type === 'pay-per-play' && !p.paid;
-    const owesGuest = (p.guestCount || 0) > 0 && !p.guestPaid;
-    return owesOwn || owesGuest;
-  });
-
-  if (!debtors.length) { showToast('Tất cả đã thanh toán!', 'success'); return; }
-  if (!confirm(`Ghi nợ ${debtors.length} người chưa trả?`)) return;
-
-  const batch = db.batch();
-  const satDate = session.date?.toDate ? session.date.toDate() : new Date();
-
-  debtors.forEach(p => {
-    const ownDebt   = (p.type === 'pay-per-play' && !p.paid) ? p.amount : 0;
-    const guestDebt = (!p.guestPaid ? (p.guestAmount || 0) : 0);
-    const ref = db.collection('debts').doc();
-    batch.set(ref, {
-      playerId: p.playerId,
-      playerName: p.playerName,
-      amount: ownDebt + guestDebt,
-      sessionId: session.id,
-      sessionDate: satDate.toISOString().split('T')[0],
-      cleared: false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-  });
 
-  await batch.commit();
-  showToast(`Đã ghi nợ ${debtors.length} người`, 'success');
-  document.getElementById('closePayCard').style.display = 'none';
-  await loadDebts();
-}
+    Object.entries(rsvps).forEach(([pid, rsvp]) => {
+      if (!isGoing(rsvp)) return;
 
-function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-</script>
+      const existing = payments[pid] || {};
+      const subscription = subscriptions[pid] || null;
+      const monthlyPaid = !!subscription;
+      const validGuests = (rsvp.guests || []).filter(guest => guest.name?.trim());
+      const guestAmount = validGuests.length * PAY_PER_PLAY;
+      const debt = activeDebts
+        .filter(item => item.playerId === pid)
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const paid = monthlyPaid ? true : (existing.type === 'per-match' ? !!existing.paid : false);
+
+      const data = {
+        playerId: pid,
+        playerName: rsvp.playerName || existing.playerName || '',
+        type: monthlyPaid ? 'monthly' : 'per-match',
+        amount: monthlyPaid ? 0 : PAY_PER_PLAY,
+        paid,
+        paidAt: paid ? (existing.paidAt || subscription?.paidAt || firebase.firestore.Timestamp.now()) : null,
+        paidMethod: paid ? (existing.paidMethod || subscription?.paidMethod || null) : null,
+        selfReported: existing.selfReported || false,
+        selfReportedAt: existing.selfReportedAt || null,
+        guestCount: validGuests.length,
+        guestAmount,
+        guestPaid: guestAmount > 0 ? !!existing.guestPaid : false,
+        guestPaidAt: guestAmount > 0 ? (existing.guestPaidAt || null) : null,
+        debt
+      };
+
+      if (!paymentChanged(existing, data)) return;
+      batch.set(db.collection('sessions').doc(sessionId).collection('payments').doc(pid), data, { merge: true });
+      changed = true;
+    });
+
+    if (changed) await batch.commit();
+  }
+
+  function paymentChanged(oldData, data) {
+    return !oldData.playerId
+      || oldData.playerName !== data.playerName
+      || oldData.type !== data.type
+      || oldData.amount !== data.amount
+      || oldData.paid !== data.paid
+      || oldData.paidMethod !== data.paidMethod
+      || oldData.selfReported !== data.selfReported
+      || oldData.guestCount !== data.guestCount
+      || oldData.guestAmount !== data.guestAmount
+      || oldData.guestPaid !== data.guestPaid
+      || oldData.debt !== data.debt;
+  }
+
+  function renderAll() {
+    const rows = Object.values(payments);
+    const pending = rows.filter(payment => payment.selfReported && !payment.paid);
+    const unpaid = rows.filter(payment => outstandingAmount(payment) > 0 && !pending.includes(payment))
+      .sort((a, b) => (b.debt || 0) - (a.debt || 0) || a.playerName.localeCompare(b.playerName, 'vi'));
+    const monthly = rows.filter(payment => payment.type === 'monthly' && payment.paid)
+      .sort((a, b) => a.playerName.localeCompare(b.playerName, 'vi'));
+    const paid = rows.filter(payment => payment.type === 'per-match' && outstandingAmount(payment) === 0 && payment.paid)
+      .sort((a, b) => a.playerName.localeCompare(b.playerName, 'vi'));
+
+    const unpaidTotal = unpaid.reduce((sum, payment) => sum + outstandingAmount(payment), 0);
+    const pendingTotal = pending.reduce((sum, payment) => sum + payment.amount + payment.guestAmount + payment.debt, 0);
+    const doneRows = [...monthly, ...paid];
+    const doneTotal = doneRows.reduce((sum, payment) => sum + payment.amount + payment.guestAmount + payment.debt, 0);
+
+    renderSummary(rows);
+    renderList('unpaidList', unpaid, renderUnpaidRow, 'Không còn ai nợ.', VISIBLE_ACTION_ROWS);
+    renderList('pendingList', pending, renderPendingRow, 'Không có chuyển khoản chờ xác nhận.', VISIBLE_ACTION_ROWS);
+    renderList('monthlyList', monthly, renderMonthlyRow, 'Chưa có thành viên tháng đã đóng.');
+    renderList('paidList', paid, renderPaidRow, 'Chưa có ai được xác nhận.');
+
+    document.getElementById('unpaidCount').textContent = unpaid.length;
+    document.getElementById('pendingCount').textContent = pending.length;
+    document.getElementById('doneCount').textContent = doneRows.length;
+    document.getElementById('unpaidPanelCount').textContent = unpaid.length;
+    document.getElementById('pendingPanelCount').textContent = pending.length;
+    document.getElementById('unpaidTotal').textContent = fmtVND(unpaidTotal);
+    document.getElementById('pendingTotal').textContent = fmtVND(pendingTotal);
+    document.getElementById('doneTotal').textContent = fmtVND(doneTotal);
+    document.getElementById('monthlyCount').textContent = monthly.length;
+    document.getElementById('paidCount').textContent = paid.length;
+
+    const closed = !!session.paymentClosed;
+    document.getElementById('closedBadge').textContent = closed ? 'Đã đóng' : 'Đang chốt';
+    document.getElementById('closedBadge').className = `status-badge ${closed ? 'is-full' : 'is-open'}`;
+  }
+
+  function renderSummary(rows) {
+    const expected = rows.reduce((sum, payment) => sum + payment.amount + payment.guestAmount + payment.debt, 0);
+    const collected = rows.reduce((sum, payment) => {
+      const ownPaid = payment.paid ? payment.amount : 0;
+      const guestPaid = payment.guestPaid ? payment.guestAmount : 0;
+      const debtPaid = payment.debt > 0 && payment.paid ? payment.debt : 0;
+      return sum + ownPaid + guestPaid + debtPaid;
+    }, 0);
+    document.getElementById('totalExpected').textContent = fmtVND(expected);
+    document.getElementById('totalCollected').textContent = fmtVND(collected);
+    document.getElementById('totalOutstanding').textContent = fmtVND(Math.max(0, expected - collected));
+  }
+
+  function renderList(id, items, rowRenderer, emptyText, limit = null) {
+    const el = document.getElementById(id);
+    if (!items.length) {
+      el.innerHTML = `<div class="pay-empty">${emptyText}</div>`;
+      return;
+    }
+
+    const visible = limit ? items.slice(0, limit) : items;
+    const hiddenCount = limit ? Math.max(0, items.length - limit) : 0;
+    el.innerHTML = visible.map(rowRenderer).join('')
+      + (hiddenCount ? `<button class="pay-more-btn" type="button" onclick="showFullList('${id}')">Xem thêm ${hiddenCount} người</button>` : '');
+  }
+
+  function showFullList(id) {
+    if (id === 'unpaidList') {
+      const pendingIds = new Set(Object.values(payments).filter(payment => payment.selfReported && !payment.paid).map(payment => payment.playerId));
+      const unpaid = Object.values(payments).filter(payment => outstandingAmount(payment) > 0 && !pendingIds.has(payment.playerId))
+        .sort((a, b) => (b.debt || 0) - (a.debt || 0) || a.playerName.localeCompare(b.playerName, 'vi'));
+      renderList(id, unpaid, renderUnpaidRow, 'Không còn ai nợ.');
+      return;
+    }
+
+    if (id === 'pendingList') {
+      const pending = Object.values(payments).filter(payment => payment.selfReported && !payment.paid);
+      renderList(id, pending, renderPendingRow, 'Không có chuyển khoản chờ xác nhận.');
+    }
+  }
+
+  function renderUnpaidRow(payment) {
+    return `
+      <article class="pay-admin-row is-action" onclick="markPaidCash('${escAttr(payment.playerId)}')">
+        <div>
+          <strong>${esc(payment.playerName)}</strong>
+          <span>${payment.debt > 0 ? `Nợ cũ ${fmtVND(payment.debt)} · ` : ''}${payment.guestAmount > 0 && !payment.guestPaid ? `Khách ${fmtVND(payment.guestAmount)} · ` : ''}${statusText(payment)}</span>
+        </div>
+        <div class="pay-row-side">
+          <b>${fmtVND(outstandingAmount(payment))}</b>
+          <button class="btn btn-sm btn-success" type="button" onclick="event.stopPropagation();markPaidCash('${escAttr(payment.playerId)}')">Tiền mặt</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderPendingRow(payment) {
+    return `
+      <article class="pay-admin-row">
+        <div>
+          <strong>${esc(payment.playerName)}</strong>
+          <span>Chờ xác nhận chuyển khoản</span>
+        </div>
+        <div class="pay-row-side">
+          <b>${fmtVND(payment.amount + payment.guestAmount + payment.debt)}</b>
+          <button class="btn btn-sm btn-success" type="button" onclick="confirmTransfer('${escAttr(payment.playerId)}')">Xác nhận</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderMonthlyRow(payment) {
+    return `
+      <article class="pay-admin-row is-muted">
+        <div>
+          <strong>${esc(payment.playerName)}</strong>
+          <span>Đã đóng tháng ${monthKey}</span>
+        </div>
+        <div class="pay-row-side">
+          <b>Miễn phí</b>
+          <span class="pay-badge">Tháng</span>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderPaidRow(payment) {
+    return `
+      <article class="pay-admin-row is-muted">
+        <div>
+          <strong>${esc(payment.playerName)}</strong>
+          <span>${payment.paidMethod === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}${payment.paidAt ? ` · ${fmtTime(toDate(payment.paidAt))}` : ''}</span>
+        </div>
+        <div class="pay-row-side">
+          <b>${fmtVND(payment.amount + payment.guestAmount + payment.debt)}</b>
+          <span class="pay-badge">Đã trả</span>
+        </div>
+      </article>
+    `;
+  }
+
+  async function markPaidCash(pid) {
+    await markPaid(pid, 'cash');
+  }
+
+  async function confirmTransfer(pid) {
+    await markPaid(pid, 'transfer');
+  }
+
+  async function markPaid(pid, method) {
+    const payment = payments[pid];
+    if (!payment) return;
+
+    try {
+      const batch = db.batch();
+      batch.set(db.collection('sessions').doc(sessionId).collection('payments').doc(pid), {
+        paid: true,
+        paidAt: firebase.firestore.FieldValue.serverTimestamp(),
+        paidMethod: method,
+        selfReported: false,
+        guestPaid: payment.guestAmount > 0 ? true : payment.guestPaid,
+        guestPaidAt: payment.guestAmount > 0 ? firebase.firestore.FieldValue.serverTimestamp() : payment.guestPaidAt
+      }, { merge: true });
+
+      activeDebts.filter(debt => debt.playerId === pid).forEach(debt => {
+        batch.set(db.collection('debts').doc(debt.id), {
+          cleared: true,
+          clearedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          clearedSessionId: sessionId
+        }, { merge: true });
+      });
+
+      await batch.commit();
+      toast(method === 'transfer' ? 'Đã xác nhận chuyển khoản.' : 'Đã ghi nhận tiền mặt.', 'success');
+    } catch (error) {
+      console.error(error);
+      toast('Không cập nhật được thanh toán.', 'error');
+    }
+  }
+
+  async function closeAndCarryDebt() {
+    const debtors = Object.values(payments).filter(payment => {
+      if (payment.type !== 'per-match') return false;
+      return !payment.paid || (payment.guestAmount > 0 && !payment.guestPaid);
+    });
+
+    if (!debtors.length) {
+      await markSessionClosed();
+      toast('Tất cả đã thanh toán.', 'success');
+      return;
+    }
+
+    if (!confirm(`Ghi nợ ${debtors.length} người chưa trả?`)) return;
+
+    try {
+      const batch = db.batch();
+      const sessionDate = toDate(session.date || session.saturdayDate || session.id) || new Date();
+      debtors.forEach(payment => {
+        const amount = (!payment.paid ? payment.amount : 0) + (!payment.guestPaid ? payment.guestAmount : 0);
+        if (amount <= 0) return;
+        batch.set(db.collection('debts').doc(`${sessionId}_${payment.playerId}`), {
+          playerId: payment.playerId,
+          playerName: payment.playerName,
+          amount,
+          sessionId,
+          sessionDate: isoDate(sessionDate),
+          cleared: false,
+          clearedAt: null,
+          clearedSessionId: null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      });
+      batch.set(db.collection('sessions').doc(sessionId), {
+        status: 'done',
+        paymentClosed: true,
+        paymentClosedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      await batch.commit();
+      session.paymentClosed = true;
+      renderAll();
+      toast(`Ghi nợ ${debtors.length} người`, 'success');
+    } catch (error) {
+      console.error(error);
+      toast('Không đóng được thanh toán.', 'error');
+    }
+  }
+
+  async function markSessionClosed() {
+    await db.collection('sessions').doc(sessionId).set({
+      status: 'done',
+      paymentClosed: true,
+      paymentClosedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    session.paymentClosed = true;
+    renderAll();
+  }
+
+  function outstandingAmount(payment) {
+    const own = payment.type === 'per-match' && !payment.paid ? payment.amount : 0;
+    const guest = payment.guestAmount > 0 && !payment.guestPaid ? payment.guestAmount : 0;
+    const debt = payment.debt > 0 ? payment.debt : 0;
+    return own + guest + debt;
+  }
+
+  function statusText(payment) {
+    if (payment.debt > 0) return 'Có nợ cũ';
+    if (payment.guestAmount > 0 && !payment.guestPaid) return 'Chưa trả tiền khách';
+    return 'Chưa trả theo buổi';
+  }
+
+  function toggleSection(id) {
+    const el = document.getElementById(id);
+    el.hidden = !el.hidden;
+  }
+
+  function scrollToSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function isGoing(data) {
+    return !!data && ['in', 'going'].includes(data.status || data.vote);
+  }
+
+  function monthFromDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function isoDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+
+  function toDate(value) {
+    if (!value) return null;
+    if (value.toDate) return value.toDate();
+    if (value instanceof Date) return value;
+    return new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
+  }
+
+  function fmtDate(date) {
+    return new Intl.DateTimeFormat('vi-VN', {
+      weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+    }).format(date);
+  }
+
+  function fmtTime(date) {
+    return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+
+  function fmtVND(amount) {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
+  }
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+    }[char]));
+  }
+
+  function escAttr(value) {
+    return esc(value).replace(/`/g, '&#096;');
+  }
+
+  function show(id) { document.getElementById(id).hidden = false; }
+  function hide(id) { document.getElementById(id).hidden = true; }
+
+  function toast(message, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.className = `toast show ${type}`;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.className = 'toast'; }, 2400);
+  }
+  </script>
 </body>
 </html>

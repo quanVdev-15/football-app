@@ -9,7 +9,12 @@ let adminRsvps = {};
 let adminUnsubSession = null;
 let adminUnsubRsvps = null;
 let adminUnsubPlayers = null;
-let adminLang = localStorage.getItem('bdt7_lang') || 'vi';
+let adminLang = 'en';
+let adminRosterMode = 'going';
+let adminRosterSearch = '';
+let adminRosterExpanded = false;
+const ADMIN_ROSTER_LIMIT = 5;
+const ADMIN_GOING_PREVIEW_LIMIT = 10;
 
 const adminText = {
   vi: {
@@ -60,13 +65,6 @@ const adminText = {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.documentElement.lang = adminLang;
-  // Only wire hub-specific UI when on the hub page (adminLangToggle only exists there)
-  const langToggle = document.getElementById('adminLangToggle');
-  if (langToggle) {
-    langToggle.addEventListener('click', toggleAdminLang);
-    applyAdminI18n();
-    requireAuth(initAdmin);
-  }
 });
 
 function requireAuth(onSuccess) {
@@ -230,7 +228,7 @@ function renderAdminSession() {
     dateEl.textContent = '--';
     statusBadge.textContent = 'Open';
     statusBadge.className = 'status-badge is-open';
-    document.getElementById('adminGoingCount').textContent = `0 ${at('going')}`;
+    document.getElementById('adminGoingCount').textContent = '0';
     return;
   }
 
@@ -238,7 +236,7 @@ function renderAdminSession() {
   capInput.value = cap;
   dateEl.textContent = formatAdminDate(toDate(currentSession.date || currentSession.saturdayDate || currentSession.id));
   statusLine.textContent = `${goingCount} / ${cap} ${at('going')}`;
-  document.getElementById('adminGoingCount').textContent = `${goingCount} ${at('going')}`;
+  document.getElementById('adminGoingCount').textContent = goingCount;
 
   const label = adminStatusLabel(goingCount, cap);
   statusBadge.textContent = label.text;
@@ -250,19 +248,46 @@ function renderAdminPlayers() {
   const goingIds = new Set(goingAdminPlayers().map(item => item.playerId || item.id));
   const goingGks = adminPlayers.filter(player => goingIds.has(player.id) && player.isGoalkeeper).length;
   document.getElementById('gkIndicator').textContent = `GKs: ${goingGks}/3`;
+  renderGoingPreview(goingIds);
 
   if (!adminPlayers.length) {
     list.innerHTML = `<div class="state-card">${at('noPlayers')}</div>`;
     return;
   }
 
-  list.innerHTML = adminPlayers.map(player => {
+  syncRosterTabs();
+
+  const search = normalizeName(adminRosterSearch);
+  let visiblePlayers = adminPlayers.filter(player => {
+    const isGoing = goingIds.has(player.id);
+    if (adminRosterMode === 'going' && !isGoing) return false;
+    if (adminRosterMode === 'gk' && !player.isGoalkeeper) return false;
+    if (search && !normalizeName(player.name || '').includes(search)) return false;
+    return true;
+  });
+
+  visiblePlayers = visiblePlayers.sort((a, b) => {
+    const aGoing = goingIds.has(a.id);
+    const bGoing = goingIds.has(b.id);
+    if (aGoing !== bGoing) return aGoing ? -1 : 1;
+    return String(a.name || '').localeCompare(String(b.name || ''), adminLang === 'vi' ? 'vi' : 'en', { sensitivity: 'base' });
+  });
+
+  const total = visiblePlayers.length;
+  const shown = adminRosterExpanded ? visiblePlayers : visiblePlayers.slice(0, ADMIN_ROSTER_LIMIT);
+
+  if (!shown.length) {
+    list.innerHTML = `<div class="pay-empty">Không có cầu thủ phù hợp.</div>`;
+    return;
+  }
+
+  list.innerHTML = shown.map(player => {
     const isGoing = goingIds.has(player.id);
     return `
       <article class="admin-player ${isGoing ? 'is-going' : ''}">
         <div>
           <strong>${esc(player.name || '')}</strong>
-          <small>${isGoing ? at('going') : 'Not Going'}</small>
+          <small>${isGoing ? 'Going' : 'Not going'}</small>
         </div>
         <label class="switch">
           <input type="checkbox" data-gk-player="${escAttr(player.id)}" ${player.isGoalkeeper ? 'checked' : ''}>
@@ -270,37 +295,108 @@ function renderAdminPlayers() {
         </label>
       </article>
     `;
-  }).join('');
+  }).join('') + rosterMoreButton(total, shown.length);
 
   list.querySelectorAll('[data-gk-player]').forEach(input => {
     input.addEventListener('change', () => toggleGoalkeeper(input.dataset.gkPlayer, input.checked));
   });
 }
 
-async function openPoll() {
-  const cap = Number(document.getElementById('capInput').value || ADMIN_DEFAULT_CAP);
+function renderGoingPreview(goingIds) {
+  const preview = document.getElementById('adminGoingPreview');
+  if (!preview) return;
+
+  const going = adminPlayers
+    .filter(player => goingIds.has(player.id))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), adminLang === 'vi' ? 'vi' : 'en', { sensitivity: 'base' }));
+
+  if (!going.length) {
+    preview.innerHTML = `<div class="pay-empty">Chưa có ai đăng ký.</div>`;
+    return;
+  }
+
+  const visible = going.slice(0, ADMIN_GOING_PREVIEW_LIMIT);
+  preview.innerHTML = visible.map(player => `
+    <span class="admin-going-chip ${player.isGoalkeeper ? 'is-gk' : ''}">
+      ${esc(player.name || '')}${player.isGoalkeeper ? ' · GK' : ''}
+    </span>
+  `).join('') + (going.length > visible.length ? `<span class="admin-going-chip is-more">+${going.length - visible.length}</span>` : '');
+}
+
+function rosterMoreButton(total, shown) {
+  if (total <= shown) return '';
+  return `<button class="pay-more-btn" type="button" onclick="expandAdminRoster()">Xem thêm ${total - shown} người</button>`;
+}
+
+function setAdminRosterMode(mode) {
+  adminRosterMode = mode;
+  adminRosterExpanded = false;
+  renderAdminPlayers();
+}
+
+function setAdminRosterSearch(value) {
+  adminRosterSearch = value || '';
+  adminRosterExpanded = false;
+  renderAdminPlayers();
+}
+
+function expandAdminRoster() {
+  adminRosterExpanded = true;
+  renderAdminPlayers();
+}
+
+function syncRosterTabs() {
+  ['going', 'gk', 'all'].forEach(mode => {
+    document.getElementById(`rosterTab${mode[0].toUpperCase()}${mode.slice(1)}`)?.classList.toggle('active', adminRosterMode === mode);
+  });
+}
+
+function openPoll() {
   if (!currentSession) {
-    const saturday = nextSaturday();
-    const sid = isoDate(saturday);
+    // Show date picker overlay for new session
+    const d = new Date();
+    const daysToSat = (6 - d.getDay() + 7) % 7 || 7;
+    d.setDate(d.getDate() + daysToSat);
+    const overlay = document.getElementById('sessionOverlay');
+    if (overlay) {
+      document.getElementById('sDate').value = d.toISOString().slice(0, 10);
+      document.getElementById('sLocation').value = '';
+      overlay.hidden = false;
+    }
+    return;
+  }
+  // Re-open existing session
+  const cap = Number(document.getElementById('capInput').value || ADMIN_DEFAULT_CAP);
+  db.collection('sessions').doc(currentSession.id).set({
+    status: 'rsvp',
+    rsvpCap: cap,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true }).then(() => toast('Poll opened', 'success'));
+}
+
+async function openPollWithDate(dateStr, time, location) {
+  const cap = Number(document.getElementById('capInput').value || ADMIN_DEFAULT_CAP);
+  const dateObj = new Date(dateStr + 'T' + (time || '06:30') + ':00');
+  const sid = dateStr;
+  try {
     await db.collection('sessions').doc(sid).set({
-      date: firebase.firestore.Timestamp.fromDate(saturday),
+      date: firebase.firestore.Timestamp.fromDate(dateObj),
       saturdayDate: sid,
+      time: time || '',
+      location: location || '',
       status: 'rsvp',
       rsvpCap: cap,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     await db.collection('config').doc('app').set({ currentSessionId: sid }, { merge: true });
-    currentSession = { id: sid, status: 'rsvp', rsvpCap: cap, date: saturday };
+    currentSession = { id: sid, status: 'rsvp', rsvpCap: cap, date: dateObj };
     subscribeAdminSession(sid);
     subscribeAdminRsvps(sid);
-  } else {
-    await db.collection('sessions').doc(currentSession.id).set({
-      status: 'rsvp',
-      rsvpCap: cap,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    toast('Poll opened', 'success');
+  } catch(e) {
+    console.error(e);
+    toast('Failed to open poll.', 'error');
   }
-  toast(at('opened'), 'success');
 }
 
 async function lockPoll() {

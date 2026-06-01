@@ -7,69 +7,63 @@
   <meta name="theme-color" content="#1b4332">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body class="app-shell admin-page admin-teams-page">
 
-<header class="app-header">
-  <h1>⚽ Phân Đội</h1>
-  <div class="header-right">
-    <a href="/admin/" class="admin-link">← Hub</a>
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>Teams</h1>
+  </div>
+  <div class="topbar-actions">
+    <a href="/admin/" class="chip-btn">Hub</a>
   </div>
 </header>
 
-<main class="container" id="adminContent" style="display:none">
+<main class="page" id="adminContent" hidden>
 
   <!-- No session -->
-  <div id="noSessionMsg" style="display:none" class="empty">
-    <div class="empty-icon">📅</div>
-    <p>Chưa có buổi đá. <a href="/admin/" style="color:var(--primary);font-weight:700">Về Hub</a>.</p>
+  <div id="noSessionMsg" style="display:none" class="state-card">
+    <h2>No active session</h2>
+    <p>Go to Hub to open a poll first.</p>
   </div>
 
   <!-- No RSVPs -->
-  <div id="noRsvpMsg" style="display:none" class="empty">
-    <div class="empty-icon">👥</div>
-    <p>Chưa có ai đăng ký buổi này. Cầu thủ cần RSVP ở trang chính trước.</p>
+  <div id="noRsvpMsg" style="display:none" class="state-card">
+    <h2>No RSVPs yet</h2>
+    <p>Players need to RSVP on the main screen first.</p>
   </div>
 
   <!-- Player summary -->
-  <div id="summaryCard" class="card" style="display:none">
-    <div class="card-header">
-      <span class="card-title">Cầu thủ đăng ký</span>
-      <span class="badge badge-blue" id="totalBadge">0</span>
+  <section id="summaryCard" class="teams-draft-panel" style="display:none">
+    <div class="teams-draft-head">
+      <div>
+        <span class="status-badge is-ready">3 teams</span>
+        <h2>Registered players</h2>
+        <p id="summaryMeta"></p>
+      </div>
+      <strong id="totalBadge">0</strong>
     </div>
-    <div id="summaryMeta" style="font-size:.85rem;color:var(--text-muted);margin-bottom:10px"></div>
-    <div id="playerChips" style="display:flex;flex-wrap:wrap;gap:4px"></div>
-  </div>
+    <div id="playerChips" class="teams-player-preview"></div>
+  </section>
 
   <!-- Remix controls -->
-  <div id="remixCard" class="card" style="display:none">
-    <div class="form-group" style="margin-bottom:14px">
-      <label class="form-label">Số đội</label>
-      <div class="form-select-wrap">
-        <select class="form-select" id="numTeamsSelect">
-          <option value="auto">Tự động (dựa theo số cầu thủ)</option>
-          <option value="3">3 đội</option>
-          <option value="4">4 đội</option>
-        </select>
-      </div>
-    </div>
-    <button class="btn btn-primary btn-block btn-lg" onclick="doRemix()">
-      🔀 Tạo đội ngẫu nhiên
-    </button>
-  </div>
+  <section id="remixCard" class="teams-action-panel" style="display:none">
+    <button class="btn primary btn-block" onclick="doRemix()">Randomize teams</button>
+  </section>
 
   <!-- GK warning -->
-  <div id="gkWarning" class="gk-warning" style="display:none;background:#fff3e0;border:1.5px solid #e65100;border-radius:12px;padding:14px 16px;margin-bottom:14px">
-    <div style="font-weight:800;color:#e65100;margin-bottom:4px">⚠️ Thiếu thủ môn</div>
-    <div id="gkWarningText" style="font-size:.85rem;color:#5d4037"></div>
+  <div id="gkWarning" class="teams-warning" style="display:none">
+    <strong>Missing goalkeeper</strong>
+    <span id="gkWarningText"></span>
   </div>
 
   <!-- Teams result -->
   <div id="teamsResult" style="display:none">
-    <div id="teamCards"></div>
-    <div class="team-actions" style="margin-top:4px;display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-ghost btn-block" onclick="doRemix()">🔀 Trộn lại</button>
-      <button class="btn btn-success btn-block btn-lg" id="confirmBtn" onclick="confirmTeams()">
-        ✅ Xác nhận & Chuyển sang Rotation
+    <div id="teamCards" class="teams-admin-grid"></div>
+    <div class="teams-sticky-actions">
+      <button class="btn secondary btn-block" onclick="doRemix()">Reshuffle</button>
+      <button class="btn btn-success btn-block" id="confirmBtn" onclick="confirmTeams()">
+        Confirm teams
       </button>
     </div>
   </div>
@@ -89,15 +83,16 @@ let session = null;
 let rsvps   = [];   // { id, name, isGoalkeeper }
 let _pendingTeams = null;
 
-const TEAM_NAME_ARR  = { 3: ['Đỏ', 'Xanh', 'Vàng'],           4: ['Đỏ', 'Xanh', 'Vàng', 'Tím'] };
+const TEAM_NAME_ARR  = { 3: ['Red', 'Blue', 'Yellow'],         4: ['Red', 'Blue', 'Yellow', 'Purple'] };
 const TEAM_COLOR_ARR = { 3: ['red', 'blue', 'green'],           4: ['red', 'blue', 'green', 'yellow'] };
-const COLOR_HEX      = { red: '#e53935', blue: '#1565c0', green: '#2e7d32', yellow: '#f9a825', Tím: '#7b1fa2' };
+const COLOR_HEX      = { red: '#e53935', blue: '#1565c0', green: '#2e7d32', yellow: '#f9a825', purple: '#7b1fa2' };
+const PLAYER_PREVIEW_LIMIT = 12;
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => requireAuth(init));
 
 async function init() {
-  document.getElementById('adminContent').style.display = '';
+  document.getElementById('adminContent').hidden = false;
 
   session = await getActiveSession();
   if (!session) {
@@ -116,7 +111,7 @@ async function init() {
   rsvps = [];
   rsvpSnap.docs.forEach(d => {
     const data = d.data();
-    if (data.status !== 'in') return;
+    if (!['in', 'going'].includes(data.status || data.vote)) return;
     const pData = playerMap[d.id] || {};
     rsvps.push({
       id: d.id,
@@ -125,7 +120,7 @@ async function init() {
     });
     (data.guests || []).forEach((g, i) => {
       if (g.name && g.name.trim())
-        rsvps.push({ id: d.id + '_g' + i, name: g.name.trim() + ' (khách)', isGoalkeeper: false });
+        rsvps.push({ id: d.id + '_g' + i, name: g.name.trim() + ' (guest)', isGoalkeeper: false });
     });
   });
 
@@ -145,7 +140,7 @@ async function init() {
       const existing = teamsSnap.docs.map(d => ({ ...d.data(), _saved: true }));
       renderTeamCards(existing);
       document.getElementById('teamsResult').style.display = '';
-      document.getElementById('confirmBtn').textContent = '🔄 Lưu lại đội mới';
+      document.getElementById('confirmBtn').textContent = 'Save new teams';
     }
   }
 }
@@ -153,20 +148,18 @@ async function init() {
 // ─── Summary ──────────────────────────────────────────────────────────────────
 function renderSummary() {
   const gkCount = rsvps.filter(p => p.isGoalkeeper).length;
-  const autoTeams = rsvps.length >= 23 ? 4 : 3;
   document.getElementById('totalBadge').textContent = rsvps.length;
   document.getElementById('summaryMeta').innerHTML =
-    `<b>${rsvps.length}</b> cầu thủ · <b>${gkCount}</b> thủ môn · tự động: <b>${autoTeams} đội</b>`;
-  document.getElementById('playerChips').innerHTML = rsvps
-    .map(p => `<span class="player-pill">${p.isGoalkeeper ? '🧤 ' : ''}${esc(p.name)}</span>`)
-    .join('');
+    `${rsvps.length} players · ${gkCount} GK`;
+  const visible = rsvps.slice(0, PLAYER_PREVIEW_LIMIT);
+  document.getElementById('playerChips').innerHTML = visible
+    .map(p => `<span class="admin-going-chip ${p.isGoalkeeper ? 'is-gk' : ''}">${esc(p.name)}${p.isGoalkeeper ? ' · GK' : ''}</span>`)
+    .join('') + (rsvps.length > visible.length ? `<span class="admin-going-chip is-more">+${rsvps.length - visible.length}</span>` : '');
 }
 
 // ─── Remix ────────────────────────────────────────────────────────────────────
 function getNumTeams() {
-  const val = document.getElementById('numTeamsSelect').value;
-  if (val === 'auto') return rsvps.length >= 23 ? 4 : 3;
-  return parseInt(val);
+  return 3;
 }
 
 function doRemix() {
@@ -180,15 +173,15 @@ function doRemix() {
   if (teamsWithoutGK.length) {
     warnEl.style.display = '';
     document.getElementById('gkWarningText').textContent =
-      `${teamsWithoutGK.map(t => t.name).join(', ')} không có thủ môn. ` +
-      `Đánh dấu thêm cầu thủ TM trong quản lý cầu thủ hoặc trộn lại.`;
+      `${teamsWithoutGK.map(t => t.name).join(', ')} has no goalkeeper. ` +
+      `Mark more GK players in the hub or reshuffle.`;
   } else {
     warnEl.style.display = 'none';
   }
 
   renderTeamCards(teams);
   document.getElementById('teamsResult').style.display = '';
-  document.getElementById('confirmBtn').textContent = '✅ Xác nhận & Chuyển sang Rotation';
+  document.getElementById('confirmBtn').textContent = 'Confirm teams';
 
   const tc = document.getElementById('teamCards');
   tc.classList.remove('remix-flash');
@@ -243,39 +236,41 @@ function buildTeams(players, numTeams) {
 // ─── Render team cards ────────────────────────────────────────────────────────
 function renderTeamCards(teams) {
   document.getElementById('teamCards').innerHTML = teams.map(team => {
-    const hex = COLOR_HEX[team.color] || '#999';
     const gkPlayers    = (team.players || []).filter(p => p.isGK);
     const fieldPlayers = (team.players || []).filter(p => !p.isGK);
     const subs         = team.subs || [];
-    return `<div class="card" style="margin-bottom:10px;border-left:4px solid ${hex}">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <div class="team-dot team-dot-${team.color}"></div>
-        <div style="font-weight:800;font-size:1rem">${esc(team.name)}</div>
-        <span class="badge badge-grey">${(team.players||[]).length} cầu thủ</span>
-        ${subs.length ? `<span class="badge badge-yellow">${subs.length} sub</span>` : ''}
+    return `<article class="teams-admin-card team-color-${escAttr(team.color)}">
+      <div class="teams-admin-head">
+        <span class="team-swatch"></span>
+        <div>
+          <h3>${esc(team.name)}</h3>
+          <p>${(team.players || []).length} players${subs.length ? ` · ${subs.length} subs` : ''}</p>
+        </div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${gkPlayers.map(p =>
-          `<div class="draft-pick-chip" style="background:#e8f5e9;border:1px solid #a5d6a7">🧤 ${esc(p.name)}</div>`
-        ).join('')}
-        ${fieldPlayers.map(p =>
-          `<div class="draft-pick-chip">${esc(p.name)}</div>`
-        ).join('')}
-        ${subs.map(p =>
-          `<div class="draft-pick-chip" style="opacity:.6;font-style:italic">${p.isGK ? '🧤 ' : ''}${esc(p.name)} ↩</div>`
-        ).join('')}
+      <div class="teams-admin-players">
+        ${gkPlayers.map((p, i) => renderTeamPlayerChip(p, i, true)).join('')}
+        ${fieldPlayers.map((p, i) => renderTeamPlayerChip(p, i + gkPlayers.length, false)).join('')}
       </div>
-    </div>`;
+      ${subs.length ? `<details class="teams-subs"><summary>${subs.length} subs</summary><div>${subs.map((p, i) => renderTeamPlayerChip(p, i, !!p.isGK, true)).join('')}</div></details>` : ''}
+    </article>`;
   }).join('');
+}
+
+function renderTeamPlayerChip(player, index, isGk, isSub = false) {
+  return `<div class="teams-player-row ${isGk ? 'is-gk' : ''} ${isSub ? 'is-sub' : ''}">
+    <span>${String(index + 1).padStart(2, '0')}</span>
+    <strong>${esc(player.name)}</strong>
+    ${isGk ? '<em>GK</em>' : ''}
+  </div>`;
 }
 
 // ─── Confirm ──────────────────────────────────────────────────────────────────
 async function confirmTeams() {
-  if (!_pendingTeams) { showToast('Hãy tạo đội trước!', 'error'); return; }
+  if (!_pendingTeams) { showToast('Generate teams first!', 'error'); return; }
 
   const btn = document.getElementById('confirmBtn');
   btn.disabled = true;
-  btn.textContent = 'Đang lưu...';
+  btn.textContent = 'Saving...';
 
   try {
     const batch = db.batch();
@@ -304,19 +299,23 @@ async function confirmTeams() {
     batch.update(sessRef, { status: 'teams' });
     await batch.commit();
 
-    showToast('Đội đã được lưu! ✅', 'success');
-    setTimeout(() => { location.href = '/admin/rotation.html'; }, 1000);
+    showToast('Teams saved!', 'success');
+    setTimeout(() => { location.href = '/admin/'; }, 1000);
   } catch (e) {
     console.error(e);
-    showToast('Lỗi khi lưu đội!', 'error');
+    showToast('Failed to save teams!', 'error');
     btn.disabled = false;
-    btn.textContent = '✅ Xác nhận & Chuyển sang Rotation';
+    btn.textContent = 'Confirm teams';
   }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escAttr(str) {
+  return esc(str).replace(/`/g, '&#096;');
 }
 </script>
 </body>

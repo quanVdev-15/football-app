@@ -218,7 +218,7 @@ function renderSlotsNotif() {
   const identity   = currentIdentity();
   const alreadyIn  = isGoing(currentPlayerRsvp(identity));
   const cap        = getCap();
-  const going      = goingPlayers().length;
+  const going      = totalHeadcount();
   const slotsLeft  = cap - going;
   const pollClosed = isTeamsReady() || isLockedStatus();
 
@@ -249,7 +249,7 @@ function renderStaticSession() {
 
 function renderCounter() {
   const cap = getCap();
-  const going = goingPlayers().length;
+  const going = totalHeadcount();
   const isReady = isTeamsReady();
   const isFull = !isReady && going >= cap;
 
@@ -575,7 +575,7 @@ async function toggleMyRsvp() {
     return;
   }
 
-  if (!currentlyGoing && goingPlayers().length >= cap) {
+  if (!currentlyGoing && totalHeadcount() >= cap) {
     toast(t('fullMsg'), 'error');
     return;
   }
@@ -595,6 +595,13 @@ async function toggleMyRsvp() {
 
 function goingPlayers() {
   return Object.values(rsvps).filter(isGoing);
+}
+
+function totalHeadcount() {
+  return goingPlayers().reduce((sum, p) => {
+    const guests = (p.guests || []).filter(g => g.name?.trim()).length;
+    return sum + 1 + guests;
+  }, 0);
 }
 
 function sortedGoingPlayers(identity) {
@@ -627,7 +634,7 @@ function isLockedStatus() {
 }
 
 function isFullStatus() {
-  return session?.status === 'full' || (!isTeamsReady() && goingPlayers().length >= getCap());
+  return session?.status === 'full' || (!isTeamsReady() && totalHeadcount() >= getCap());
 }
 
 function shouldHideMyRsvp() {

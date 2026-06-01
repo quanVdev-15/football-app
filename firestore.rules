@@ -20,6 +20,12 @@ service cloud.firestore {
       allow write: if true; // TODO: restrict to admin auth
     }
 
+    // Monthly subscription payments.
+    match /subscriptions/{subscriptionId} {
+      allow read: if true;
+      allow write: if true; // TODO: restrict admin-only fields once real auth is added
+    }
+
     // ── Sessions ───────────────────────────────────────────────────────────────
     match /sessions/{sessionId} {
       // Anyone can read session metadata (date, status, maxCap)
@@ -33,10 +39,38 @@ service cloud.firestore {
         allow write: if true; // cap enforcement is done in app.js client logic
       }
 
+      // RSVPs — current app flow stores attendance here.
+      match /rsvps/{playerId} {
+        allow read: if true;
+        allow write: if true; // TODO: restrict/validate once real auth is added
+      }
+
+      // Payments — players self-report, admins confirm via the PIN-gated UI.
+      match /payments/{playerId} {
+        allow read: if true;
+        allow write: if true; // TODO: restrict admin-only fields once real auth is added
+      }
+
       // Teams — public read so all players see the result in real-time
       match /teams/{teamId} {
         allow read: if true;
         allow write: if true; // TODO: restrict to admin auth
+      }
+    }
+
+    // Debts carried across sessions.
+    match /debts/{debtId} {
+      allow read: if true;
+      allow write: if true; // TODO: restrict to admin auth
+    }
+
+    // Friendly match events.
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if true; // TODO: restrict admin fields once auth is added
+      match /rsvps/{playerId} {
+        allow read: if true;
+        allow write: if true;
       }
     }
   }

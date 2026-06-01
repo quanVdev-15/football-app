@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Events — Admin</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .event-card {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface, #fff);
+      border-radius: 14px; padding: 14px 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      border-left: 4px solid #e65100;
+    }
+    .event-card-body { flex: 1; min-width: 0; }
+    .event-card-body strong { display: block; font-size: .95rem; }
+    .event-card-body span   { font-size: .78rem; color: var(--text-muted, #6b7280); }
+
+    .form-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      z-index: 200; display: flex; align-items: flex-end;
+    }
+    .form-sheet {
+      background: var(--surface, #fff);
+      border-radius: 20px 20px 0 0;
+      padding: 24px 20px 40px;
+      width: 100%; max-width: 480px; margin: 0 auto;
+    }
+    .form-sheet h3 { font-size: 1.1rem; font-weight: 800; margin-bottom: 16px; }
+    .form-field { margin-bottom: 12px; }
+    .form-field label { display: block; font-size: .75rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px; color: #6b7280; margin-bottom: 5px; }
+  </style>
+</head>
+<body class="app-shell admin-page">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1>Events</h1>
+    </div>
+    <div class="topbar-actions">
+      <a href="/admin/" class="chip-btn">Hub</a>
+    </div>
+  </header>
+
+  <main class="page" id="adminContent" hidden>
+    <button class="btn primary btn-block" type="button" onclick="showForm()">+ New friendly match</button>
+
+    <div id="eventsList" style="margin-top:16px">
+      <div class="state-card"><div class="spinner"></div><p>Loading...</p></div>
+    </div>
+  </main>
+
+  <!-- Create form overlay -->
+  <div id="formOverlay" class="form-overlay" hidden onclick="hideForm()">
+    <div class="form-sheet" onclick="event.stopPropagation()">
+      <h3>New friendly match</h3>
+
+      <div class="form-field">
+        <label>Opponent</label>
+        <input id="fOpponent" class="input" type="text" placeholder="Team name">
+      </div>
+      <div class="form-field">
+        <label>Date</label>
+        <input id="fDate" class="input" type="date">
+      </div>
+      <div class="form-field">
+        <label>Time</label>
+        <input id="fTime" class="input" type="time" value="06:30">
+      </div>
+      <div class="form-field">
+        <label>Location</label>
+        <input id="fLocation" class="input" type="text" placeholder="Field name / address">
+      </div>
+      <div class="form-field" style="margin-bottom:20px">
+        <label>Note (optional)</label>
+        <input id="fNote" class="input" type="text" placeholder="e.g. Bring bibs">
+      </div>
+
+      <button class="btn primary btn-block" type="button" onclick="createEvent()">Create event</button>
+      <button class="btn btn-block" style="margin-top:8px" type="button" onclick="hideForm()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/admin-auth.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => requireAuth(initEvents));
+
+    let allEvents = [];
+
+    function initEvents() {
+      document.getElementById('adminContent').hidden = false;
+      const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+      db.collection('events')
+        .where('date', '>=', firebase.firestore.Timestamp.fromDate(todayStart))
+        .orderBy('date')
+        .onSnapshot(snap => {
+          allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          renderEvents();
+        }, err => {
+          console.error(err);
+          toast('Failed to load events.', 'error');
+        });
+    }
+
+    function renderEvents() {
+      const list = document.getElementById('eventsList');
+      const visible = allEvents.filter(e => e.status !== 'cancelled');
+
+      if (!visible.length) {
+        list.innerHTML = '<div class="state-card"><p>No upcoming friendly matches.</p></div>';
+        return;
+      }
+
+      list.innerHTML = visible.map(ev => {
+        const d = ev.date?.toDate ? ev.date.toDate() : new Date(ev.date);
+        const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        const meta = [dateStr, ev.time, ev.location].filter(Boolean).join(' · ');
+        return `<div class="event-card">
+          <div class="event-card-body">
+            <strong>vs ${esc(ev.opponent || 'TBD')}</strong>
+            <span>${esc(meta)}</span>
+            ${ev.note ? `<span>${esc(ev.note)}</span>` : ''}
+          </div>
+          <button class="chip-btn danger" type="button" onclick="cancelEvent('${ev.id}')">Cancel</button>
+        </div>`;
+      }).join('');
+    }
+
+    function showForm() {
+      // Default to next Saturday
+      const d = new Date();
+      const daysToSat = (6 - d.getDay() + 7) % 7 || 7;
+      d.setDate(d.getDate() + daysToSat);
+      document.getElementById('fDate').value = d.toISOString().slice(0, 10);
+      document.getElementById('fOpponent').value = '';
+      document.getElementById('fLocation').value = '';
+      document.getElementById('fNote').value = '';
+      document.getElementById('fTime').value = '06:30';
+      document.getElementById('formOverlay').hidden = false;
+    }
+
+    function hideForm() {
+      document.getElementById('formOverlay').hidden = true;
+    }
+
+    async function createEvent() {
+      const opponent = document.getElementById('fOpponent').value.trim();
+      const dateStr  = document.getElementById('fDate').value;
+      const time     = document.getElementById('fTime').value;
+      const location = document.getElementById('fLocation').value.trim();
+      const note     = document.getElementById('fNote').value.trim();
+
+      if (!opponent) { toast('Enter opponent name.', 'error'); return; }
+      if (!dateStr)  { toast('Pick a date.', 'error'); return; }
+
+      const dateObj = new Date(dateStr + 'T' + (time || '06:30') + ':00');
+      try {
+        await db.collection('events').add({
+          type: 'friendly',
+          opponent,
+          date: firebase.firestore.Timestamp.fromDate(dateObj),
+          time: time || '',
+          location: location || '',
+          note: note || '',
+          status: 'upcoming',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        hideForm();
+        toast('Friendly match created!', 'success');
+      } catch(e) {
+        console.error(e);
+        toast('Failed to create event.', 'error');
+      }
+    }
+
+    async function cancelEvent(id) {
+      if (!confirm('Cancel this friendly match?')) return;
+      try {
+        await db.collection('events').doc(id).update({ status: 'cancelled' });
+        toast('Event cancelled.', 'success');
+      } catch(e) {
+        toast('Failed to cancel.', 'error');
+      }
+    }
+
+    function esc(str) {
+      return String(str || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    }
+  </script>
+</body>
+</html>

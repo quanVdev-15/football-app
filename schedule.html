@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedule</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .sched-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .sched-card {
+      display: flex; gap: 14px; align-items: flex-start;
+      background: var(--surface, #fff);
+      border-radius: 16px;
+      padding: 16px;
+      text-decoration: none; color: inherit;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+
+    .sched-card-date {
+      display: flex; flex-direction: column; align-items: center;
+      min-width: 40px; text-align: center;
+      padding-top: 2px;
+    }
+    .sched-card-date .day-name { font-size: .7rem; font-weight: 700; color: var(--text-muted, #6b7280); text-transform: uppercase; }
+    .sched-card-date .day-num  { font-size: 1.6rem; font-weight: 900; line-height: 1; color: var(--text, #111); }
+    .sched-card-date .month    { font-size: .7rem; font-weight: 600; color: var(--text-muted, #6b7280); text-transform: uppercase; }
+
+    .sched-card-body { flex: 1; min-width: 0; }
+    .sched-card-body h3 { font-size: 1rem; font-weight: 800; margin: 6px 0 4px; }
+    .sched-card-body p  { font-size: .82rem; color: var(--text-muted, #6b7280); margin: 0 0 3px; }
+
+    .sched-card-session { border-left: 4px solid var(--primary, #2d6a4f); }
+    .sched-card-friendly { border-left: 4px solid #e65100; }
+
+    .badge-friendly { background: #fff3e0; color: #e65100; }
+
+    .rsvp-row { display: flex; gap: 8px; margin-top: 10px; }
+    .rsvp-btn {
+      flex: 1; padding: 9px 0; border: 1.5px solid #e5e7eb; border-radius: 10px;
+      font-size: .85rem; font-weight: 700; background: #f9fafb; cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .rsvp-btn.is-in  { background: #d1fae5; border-color: var(--primary, #2d6a4f); color: var(--primary, #2d6a4f); }
+    .rsvp-btn.is-out { background: #fee2e2; border-color: #ef4444; color: #ef4444; }
+
+    .going-count { font-size: .78rem; color: var(--text-muted, #6b7280); margin-top: 6px; }
+  </style>
+</head>
+<body class="app-shell">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Football</p>
+      <h1>Schedule</h1>
+    </div>
+    <div class="topbar-actions">
+      <a href="/" class="chip-btn">Home</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <div id="eventsList" class="sched-list">
+      <div class="state-card"><div class="spinner"></div><p>Loading...</p></div>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script>
+    const IDENTITY_KEY = 'bdt7_player';
+    let identity = null;
+    try { identity = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null'); } catch(_) {}
+    if (!identity?.name) window.location.replace('/login.html');
+
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const todayTs = firebase.firestore.Timestamp.fromDate(todayStart);
+
+    let sessions = [];
+    let events   = [];
+    let myRsvps  = {};
+    let goingCounts = {};
+
+    db.collection('sessions')
+      .where('date', '>=', todayTs)
+      .onSnapshot(snap => {
+        sessions = snap.docs
+          .map(d => ({ id: d.id, ...d.data(), _type: 'session' }))
+          .filter(s => s.status !== 'done');
+        render();
+      });
+
+    db.collection('events')
+      .where('date', '>=', todayTs)
+      .orderBy('date')
+      .onSnapshot(snap => {
+        events = snap.docs
+          .map(d => ({ id: d.id, ...d.data(), _type: 'friendly' }))
+          .filter(e => e.status !== 'cancelled');
+        loadMyRsvps(events.map(e => e.id));
+        loadGoingCounts(events.map(e => e.id));
+        render();
+      });
+
+    async function loadMyRsvps(ids) {
+      if (!identity?.playerId) return;
+      for (const id of ids) {
+        const doc = await db.collection('events').doc(id).collection('rsvps').doc(identity.playerId).get();
+        if (doc.exists) myRsvps[id] = doc.data().status;
+      }
+      render();
+    }
+
+    async function loadGoingCounts(ids) {
+      for (const id of ids) {
+        const snap = await db.collection('events').doc(id).collection('rsvps').where('status','==','in').get();
+        goingCounts[id] = snap.size;
+      }
+      render();
+    }
+
+    function render() {
+      const all = [...sessions, ...events].sort((a, b) => toTs(a.date) - toTs(b.date));
+      const list = document.getElementById('eventsList');
+
+      if (!all.length) {
+        list.innerHTML = '<div class="state-card"><p>No upcoming events.</p></div>';
+        return;
+      }
+
+      list.innerHTML = all.map(ev => {
+        const d = toDate(ev.date);
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+        const month   = d.toLocaleDateString('en-US', { month: 'short' });
+
+        if (ev._type === 'session') {
+          const statusLabel = { rsvp: 'Poll open', locked: 'Locked', teams: 'Teams ready' }[ev.status] || ev.status;
+          const badgeCls = ev.status === 'rsvp' ? 'is-open' : 'is-locked';
+          return `<a href="/" class="sched-card sched-card-session">
+            <div class="sched-card-date">
+              <span class="day-name">${dayName}</span>
+              <span class="day-num">${d.getDate()}</span>
+              <span class="month">${month}</span>
+            </div>
+            <div class="sched-card-body">
+              <span class="status-badge ${badgeCls}">${statusLabel}</span>
+              <h3>Saturday Football</h3>
+              ${ev.time ? `<p>🕐 ${esc(ev.time)}</p>` : ''}
+              ${ev.location ? `<p>📍 ${esc(ev.location)}</p>` : ''}
+            </div>
+          </a>`;
+        }
+
+        const myStatus = myRsvps[ev.id];
+        const going = goingCounts[ev.id] ?? 0;
+        return `<article class="sched-card sched-card-friendly">
+          <div class="sched-card-date">
+            <span class="day-name">${dayName}</span>
+            <span class="day-num">${d.getDate()}</span>
+            <span class="month">${month}</span>
+          </div>
+          <div class="sched-card-body">
+            <span class="status-badge badge-friendly">Friendly</span>
+            <h3>vs ${esc(ev.opponent || 'TBD')}</h3>
+            ${ev.time ? `<p>🕐 ${esc(ev.time)}</p>` : ''}
+            ${ev.location ? `<p>📍 ${esc(ev.location)}</p>` : ''}
+            ${ev.note ? `<p class="subtle">${esc(ev.note)}</p>` : ''}
+            <p class="going-count">${going} going</p>
+            <div class="rsvp-row">
+              <button class="rsvp-btn ${myStatus === 'in' ? 'is-in' : ''}" onclick="rsvp('${ev.id}','in',event)">✓ I'm in</button>
+              <button class="rsvp-btn ${myStatus === 'out' ? 'is-out' : ''}" onclick="rsvp('${ev.id}','out',event)">✗ Can't make it</button>
+            </div>
+          </div>
+        </article>`;
+      }).join('');
+    }
+
+    async function rsvp(eventId, status, e) {
+      e.preventDefault();
+      if (!identity?.playerId) { toast('Please log in first.', 'error'); return; }
+      try {
+        await db.collection('events').doc(eventId).collection('rsvps').doc(identity.playerId).set({
+          status,
+          playerName: identity.name,
+          playerId: identity.playerId,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        const prev = myRsvps[eventId];
+        myRsvps[eventId] = status;
+        if (status === 'in' && prev !== 'in') goingCounts[eventId] = (goingCounts[eventId] || 0) + 1;
+        if (status === 'out' && prev === 'in') goingCounts[eventId] = Math.max(0, (goingCounts[eventId] || 1) - 1);
+        render();
+        toast(status === 'in' ? "You're in!" : "Got it.", 'success');
+      } catch(err) {
+        console.error(err);
+        toast('Failed to save.', 'error');
+      }
+    }
+
+    function toDate(v) {
+      if (!v) return new Date();
+      if (v.toDate) return v.toDate();
+      return new Date(v);
+    }
+    function toTs(v) { return toDate(v).getTime(); }
+
+    function esc(str) {
+      return String(str || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    }
+
+    function toast(msg, type) {
+      const el = document.getElementById('toast');
+      el.textContent = msg; el.className = `toast show ${type}`;
+      clearTimeout(el._t); el._t = setTimeout(() => el.className = 'toast', 2400);
+    }
+  </script>
+</body>
+</html>

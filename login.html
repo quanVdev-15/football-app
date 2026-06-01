@@ -239,6 +239,11 @@
       <p class="field-error" id="phoneError">Số điện thoại chưa đúng (VD: 0912345678).</p>
     </div>
 
+    <label style="display:flex;align-items:center;gap:12px;margin-bottom:20px;cursor:pointer;user-select:none">
+      <input type="checkbox" id="gkCheck" style="width:20px;height:20px;accent-color:#1b4332;cursor:pointer;flex-shrink:0">
+      <span style="font-size:0.95rem;font-weight:600;color:#374151">🧤 Tôi là thủ môn</span>
+    </label>
+
     <button class="btn-join" id="joinBtn" onclick="handleJoin()">
       Vào sân ⚽
     </button>
@@ -301,11 +306,13 @@
       btn.classList.add('loading');
 
       const playerId = 'ph_' + phone;
+      const isGoalkeeper = document.getElementById('gkCheck').checked;
 
       try {
         await db.collection('players').doc(playerId).set({
           name,
           phone,
+          isGoalkeeper,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
       } catch (e) {
@@ -313,7 +320,7 @@
         // localStorage is the fallback — still proceed
       }
 
-      localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name, phone, playerId }));
+      localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name, phone, playerId, isGoalkeeper }));
       window.location.replace('/index.html');
     }
 

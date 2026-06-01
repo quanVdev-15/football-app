@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thu tháng - Admin</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="app-shell admin-page monthly-page">
+
+<!-- Payment method picker -->
+<div id="methodOverlay" class="method-overlay" hidden onclick="cancelMethod()">
+  <div class="method-sheet" onclick="event.stopPropagation()">
+    <p id="methodPlayerName"></p>
+    <button class="btn primary btn-block" type="button" onclick="resolveMethod('transfer')">Bank transfer</button>
+    <button class="btn secondary btn-block" type="button" onclick="resolveMethod('cash')">Cash</button>
+    <button class="btn btn-block" type="button" onclick="cancelMethod()">Cancel</button>
+  </div>
+</div>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1 id="monthTitle">Monthly Fee</h1>
+      <p id="monthSummary" class="subtle">--</p>
+    </div>
+    <div class="topbar-actions">
+      <a href="/admin/" class="chip-btn">Hub</a>
+    </div>
+  </header>
+
+  <main id="adminContent" class="page" hidden>
+    <section class="monthly-hero">
+      <div class="month-nav">
+        <button class="chip-btn" type="button" onclick="shiftMonth(-1)">‹</button>
+        <strong id="monthLabel">--</strong>
+        <button class="chip-btn" type="button" onclick="shiftMonth(1)">›</button>
+      </div>
+      <div class="pay-summary-grid">
+        <div>
+          <span>Paid</span>
+          <strong id="paidCount">0/0</strong>
+        </div>
+        <div>
+          <span>Collected</span>
+          <strong id="collectedTotal">0 ₫</strong>
+        </div>
+        <div>
+          <span>Remaining</span>
+          <strong id="remainingCount">0</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="monthly-tools">
+      <input id="monthlySearch" class="input" type="search" placeholder="Search players..." oninput="setMonthlySearch(this.value)">
+      <div class="admin-roster-tabs">
+        <button id="monthlyTabUnpaid" class="active" type="button" onclick="setMonthlyMode('unpaid')">Unpaid</button>
+        <button id="monthlyTabPending" type="button" onclick="setMonthlyMode('pending')">Pending</button>
+        <button id="monthlyTabPaid" type="button" onclick="setMonthlyMode('paid')">Paid</button>
+      </div>
+    </section>
+
+    <section class="monthly-focus-grid">
+      <button class="pay-focus-card danger" type="button" onclick="setMonthlyMode('unpaid')">
+        <span>Unpaid</span>
+        <strong id="unpaidCount">0</strong>
+        <small id="unpaidTotal">0 ₫</small>
+      </button>
+      <button class="pay-focus-card warning" type="button" onclick="setMonthlyMode('pending')">
+        <span>Pending</span>
+        <strong id="pendingCount">0</strong>
+        <small>Awaiting confirm</small>
+      </button>
+      <button class="pay-focus-card ok" type="button" onclick="setMonthlyMode('paid')">
+        <span>Paid</span>
+        <strong id="paidOnlyCount">0</strong>
+        <small id="paidTotal">0 ₫</small>
+      </button>
+    </section>
+
+    <section class="monthly-list-panel">
+      <div class="pay-panel-head">
+        <div>
+          <h2 id="listTitle">Chưa đóng</h2>
+          <p id="listSubtitle">Chạm tên để ghi nhận thanh toán.</p>
+        </div>
+        <span id="listCount" class="pill">0</span>
+      </div>
+      <div id="playerList" class="pay-row-list">
+        <div class="state-card">
+          <div class="spinner"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/admin-auth.js"></script>
+  <script>
+  const PAY_MONTHLY = 150000;
+
+  let currentMonth = firstDayOfMonth(new Date());
+  let monthKey = '';
+  let players = [];
+  let subscriptions = {};
+  let unsubPlayers = null;
+  let unsubSubs = null;
+  let monthlyMode = 'unpaid';
+  let monthlySearch = '';
+  let monthlyExpanded = false;
+  const MONTHLY_VISIBLE_LIMIT = 7;
+
+  window.addEventListener('DOMContentLoaded', () => requireAuth(initMonthly));
+
+  function initMonthly() {
+    document.getElementById('adminContent').hidden = false;
+    subscribePlayers();
+    loadMonth();
+  }
+
+  function subscribePlayers() {
+    if (unsubPlayers) unsubPlayers();
+    unsubPlayers = db.collection('players').orderBy('name').onSnapshot(snap => {
+      players = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      render();
+    }, error => {
+      console.error(error);
+      toast('Failed to load players.', 'error');
+    });
+  }
+
+  function loadMonth() {
+    monthKey = monthFromDate(currentMonth);
+    document.getElementById('monthTitle').textContent = `Monthly Fee — ${monthDisplay(currentMonth)}`;
+    document.getElementById('monthLabel').textContent = monthDisplay(currentMonth);
+    if (unsubSubs) unsubSubs();
+    unsubSubs = db.collection('subscriptions').where('month', '==', monthKey).onSnapshot(snap => {
+      subscriptions = {};
+      snap.docs.forEach(doc => {
+        const data = doc.data();
+        subscriptions[data.playerId] = { id: doc.id, ...data };
+      });
+      render();
+    }, error => {
+      console.error(error);
+      toast('Failed to load monthly fees.', 'error');
+    });
+  }
+
+  function render() {
+    const paid = players.filter(player => subscriptions[player.id]?.paid === true);
+    const pending = players.filter(player => {
+      const sub = subscriptions[player.id];
+      return sub?.selfReported && sub?.paid !== true;
+    });
+    const unpaid = players.filter(player => {
+      const sub = subscriptions[player.id];
+      return sub?.paid !== true && !sub?.selfReported;
+    });
+
+    document.getElementById('paidCount').textContent = `${paid.length}/${players.length}`;
+    document.getElementById('collectedTotal').textContent = fmtVND(paid.length * PAY_MONTHLY);
+    document.getElementById('monthSummary').textContent = `${paid.length}/${players.length} paid`;
+    document.getElementById('remainingCount').textContent = players.length - paid.length;
+    document.getElementById('unpaidCount').textContent = unpaid.length;
+    document.getElementById('pendingCount').textContent = pending.length;
+    document.getElementById('paidOnlyCount').textContent = paid.length;
+    document.getElementById('unpaidTotal').textContent = fmtVND((unpaid.length + pending.length) * PAY_MONTHLY);
+    document.getElementById('paidTotal').textContent = fmtVND(paid.length * PAY_MONTHLY);
+    syncMonthlyTabs();
+
+    const list = document.getElementById('playerList');
+    if (!players.length) {
+      list.innerHTML = '<div class="state-card"><p>No players yet.</p></div>';
+      return;
+    }
+
+    const search = normalizeText(monthlySearch);
+    const source = monthlyMode === 'paid' ? paid : (monthlyMode === 'pending' ? pending : unpaid);
+    const filtered = source.filter(player => !search || normalizeText(player.name || player.playerName || '').includes(search))
+      .sort((a, b) => String(a.name || a.playerName || '').localeCompare(String(b.name || b.playerName || ''), 'vi', { sensitivity: 'base' }));
+    const visible = monthlyExpanded ? filtered : filtered.slice(0, MONTHLY_VISIBLE_LIMIT);
+
+    document.getElementById('listTitle').textContent = monthlyMode === 'paid'
+      ? 'Paid'
+      : (monthlyMode === 'pending' ? 'Pending confirmation' : 'Unpaid');
+    document.getElementById('listSubtitle').textContent = monthlyMode === 'paid'
+      ? 'Tap to undo if recorded by mistake.'
+      : (monthlyMode === 'pending' ? 'Tap to confirm transfer.' : 'Tap a name to record payment.');
+    document.getElementById('listCount').textContent = filtered.length;
+
+    if (!visible.length) {
+      list.innerHTML = '<div class="pay-empty">No players found.</div>';
+      return;
+    }
+
+    list.innerHTML = visible.map(player => {
+      const sub = subscriptions[player.id] || null;
+      const isPaid = sub?.paid === true;
+      const isPending = sub?.selfReported && !isPaid;
+      return `
+        <article class="pay-admin-row ${isPaid ? 'is-muted' : 'is-action'}" onclick="${isPaid ? `undoPaid('${escAttr(player.id)}')` : `markPaid('${escAttr(player.id)}')`}">
+          <div>
+            <strong>${esc(player.name || player.playerName || '')}</strong>
+            <span>${isPaid ? paidLabel(sub) : (isPending ? 'Awaiting transfer confirmation' : 'Unpaid this month')}</span>
+          </div>
+          <div class="pay-row-side">
+            <b>${fmtVND(PAY_MONTHLY)}</b>
+            <span class="pay-badge ${isPaid ? '' : 'is-due'}">${isPaid ? 'Paid' : (isPending ? 'Pending' : 'Due')}</span>
+          </div>
+        </article>
+      `;
+    }).join('') + (filtered.length > visible.length
+      ? `<button class="pay-more-btn" type="button" onclick="expandMonthlyList()">Show ${filtered.length - visible.length} more</button>`
+      : '');
+  }
+
+  function setMonthlyMode(mode) {
+    monthlyMode = mode;
+    monthlyExpanded = false;
+    render();
+  }
+
+  function setMonthlySearch(value) {
+    monthlySearch = value || '';
+    monthlyExpanded = false;
+    render();
+  }
+
+  function expandMonthlyList() {
+    monthlyExpanded = true;
+    render();
+  }
+
+  function syncMonthlyTabs() {
+    ['unpaid', 'pending', 'paid'].forEach(mode => {
+      document.getElementById(`monthlyTab${mode[0].toUpperCase()}${mode.slice(1)}`)?.classList.toggle('active', monthlyMode === mode);
+    });
+  }
+
+  async function markPaid(playerId) {
+    const player = players.find(item => item.id === playerId);
+    if (!player) return;
+
+    const method = await askMethod(player.name || player.playerName || '');
+    if (!method) return;
+
+    try {
+      await db.collection('subscriptions').doc(`${playerId}_${monthKey}`).set({
+        playerId,
+        playerName: player.name || player.playerName || '',
+        month: monthKey,
+        amount: PAY_MONTHLY,
+        paid: true,
+        paidAt: firebase.firestore.FieldValue.serverTimestamp(),
+        paidMethod: method,
+        selfReported: false,
+        selfReportedAt: null
+      }, { merge: true });
+      toast('Payment recorded.', 'success');
+    } catch (error) {
+      console.error(error);
+      toast('Failed to save payment.', 'error');
+    }
+  }
+
+  async function undoPaid(playerId) {
+    const player = players.find(item => item.id === playerId);
+    if (!player) return;
+    if (!confirm(`Undo payment for ${player.name || player.playerName || ''}?`)) return;
+
+    try {
+      await db.collection('subscriptions').doc(`${playerId}_${monthKey}`).set({
+        playerId,
+        playerName: player.name || player.playerName || '',
+        month: monthKey,
+        amount: PAY_MONTHLY,
+        paid: false,
+        paidAt: null,
+        paidMethod: null
+      }, { merge: true });
+      toast('Payment undone.', 'success');
+    } catch (error) {
+      console.error(error);
+      toast('Failed to undo payment.', 'error');
+    }
+  }
+
+  function shiftMonth(delta) {
+    currentMonth = firstDayOfMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1));
+    loadMonth();
+  }
+
+  let methodResolve = null;
+
+  function askMethod(playerName) {
+    return new Promise(resolve => {
+      methodResolve = resolve;
+      document.getElementById('methodPlayerName').textContent = playerName || '';
+      const overlay = document.getElementById('methodOverlay');
+      overlay.hidden = false;
+    });
+  }
+
+  function resolveMethod(method) {
+    document.getElementById('methodOverlay').hidden = true;
+    if (methodResolve) { methodResolve(method); methodResolve = null; }
+  }
+
+  function cancelMethod() {
+    document.getElementById('methodOverlay').hidden = true;
+    if (methodResolve) { methodResolve(null); methodResolve = null; }
+  }
+
+  function paidLabel(sub) {
+    const method = sub?.paidMethod === 'transfer' ? 'Transfer' : 'Cash';
+    return sub?.paidAt ? `${method} · ${fmtTime(toDate(sub.paidAt))}` : method;
+  }
+
+  function firstDayOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  function monthFromDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function monthDisplay(date) {
+    return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(date);
+  }
+
+  function toDate(value) {
+    if (!value) return null;
+    if (value.toDate) return value.toDate();
+    if (value instanceof Date) return value;
+    return new Date(value);
+  }
+
+  function fmtTime(date) {
+    return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+
+  function fmtVND(amount) {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
+  }
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+    }[char]));
+  }
+
+  function escAttr(value) {
+    return esc(value).replace(/`/g, '&#096;');
+  }
+
+  function normalizeText(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  function toast(message, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.className = `toast show ${type}`;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.className = 'toast'; }, 2400);
+  }
+  </script>
+</body>
+</html>

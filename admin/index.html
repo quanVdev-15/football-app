@@ -7,97 +7,161 @@
   <meta name="theme-color" content="#1b4332">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="app-shell admin-page">
-  <header class="topbar">
+<body class="app-shell admin-page admin-hub">
+  <header class="topbar admin-hub-topbar">
     <div>
       <p class="eyebrow">Admin</p>
-      <h1>Bóng Đá Thứ 7</h1>
+      <h1>Hub</h1>
       <p id="adminSessionDate" class="subtle">--</p>
     </div>
     <div class="topbar-actions">
-      <button id="adminLangToggle" class="chip-btn" type="button">EN</button>
       <button class="chip-btn danger" type="button" onclick="logoutAdmin()">Logout</button>
     </div>
   </header>
 
-  <main id="adminContent" class="page" hidden>
-    <section class="admin-panel">
-      <div class="section-head compact">
+  <main id="adminContent" class="page admin-dashboard" hidden>
+    <section class="admin-command">
+      <div class="admin-command-head">
         <div>
-          <h2 data-i18n="sessionControls">Điều khiển buổi đá</h2>
+          <span id="adminStatusBadge" class="status-badge is-open">Open</span>
+          <h2>This week's session</h2>
           <p id="adminStatusLine">--</p>
         </div>
-        <span id="adminStatusBadge" class="status-badge is-open">Open</span>
+        <span id="adminGoingCount" class="admin-big-count">0</span>
       </div>
 
-      <div class="button-row">
-        <button class="btn primary" type="button" onclick="openPoll()" data-i18n="openPoll">Open Poll</button>
-        <button class="btn secondary" type="button" onclick="lockPoll()" data-i18n="lockPoll">Lock Poll</button>
-        <a class="btn accent" href="/admin/teams.html" data-i18n="randomizeTeams">Manage Teams</a>
+      <div class="admin-quick-actions">
+        <button class="admin-action-card primary" type="button" onclick="openPoll()">
+          <span>Open poll</span>
+          <strong>RSVP</strong>
+        </button>
+        <button class="admin-action-card" type="button" onclick="lockPoll()">
+          <span>Lock list</span>
+          <strong>Lock</strong>
+        </button>
+        <a class="admin-action-card accent" href="/admin/teams.html">
+          <span>Split teams</span>
+          <strong>Teams</strong>
+        </a>
+        <a class="admin-action-card money" href="/admin/monthly.html">
+          <span>Monthly fee</span>
+          <strong>150k</strong>
+        </a>
+        <a class="admin-action-card" href="/admin/events.html">
+          <span>Friendlies</span>
+          <strong>Events</strong>
+        </a>
       </div>
 
-      <label class="field-label" for="capInput" data-i18n="maxCap">Giới hạn người chơi</label>
-      <div class="inline-field">
-        <input id="capInput" class="input" type="number" min="3" max="60" value="21">
-        <button class="btn secondary" type="button" onclick="saveCap()" data-i18n="save">Lưu</button>
+      <div class="admin-cap-row">
+        <label for="capInput">Player cap</label>
+        <div class="admin-cap-control">
+          <button type="button" onclick="adjustCap(-1)" aria-label="Decrease cap">−</button>
+          <input id="capInput" class="input" type="number" min="3" max="60" value="21" inputmode="numeric">
+          <button type="button" onclick="adjustCap(1)" aria-label="Increase cap">+</button>
+        </div>
+        <div class="admin-cap-presets">
+          <button type="button" onclick="setCapValue(18)">18</button>
+          <button class="active" type="button" onclick="setCapValue(21)">21</button>
+          <button type="button" onclick="setCapValue(24)">24</button>
+        </div>
+        <div class="admin-cap-save">
+          <span id="capHint">Standard 3 teams x 7</span>
+          <button class="btn secondary" type="button" onclick="saveCap()">Save cap</button>
+        </div>
       </div>
     </section>
 
-    <section class="admin-panel">
-      <div class="section-head compact">
+    <section class="admin-danger-strip">
+      <div>
+        <strong>End session</strong>
+        <span>Move to payment collection and debt recording.</span>
+      </div>
+      <button class="btn btn-danger" type="button" onclick="endSessionAndGoPayment()">Collect</button>
+    </section>
+
+    <section class="admin-panel admin-roster-panel">
+      <div class="admin-panel-title">
         <div>
-          <h2 data-i18n="playerList">Danh sách cầu thủ</h2>
+          <h2>Going today</h2>
           <p id="gkIndicator">GKs: 0/3</p>
         </div>
-        <span id="adminGoingCount" class="pill">0 Going</span>
       </div>
-      <div id="adminPlayers" class="admin-player-list"></div>
+      <div id="adminGoingPreview" class="admin-going-preview"></div>
+
+      <details class="admin-roster-details">
+        <summary>Manage players / GK</summary>
+        <div class="admin-roster-tools">
+          <input id="adminPlayerSearch" class="input" type="search" placeholder="Search players..." oninput="setAdminRosterSearch(this.value)">
+          <div class="admin-roster-tabs">
+            <button id="rosterTabGoing" class="active" type="button" onclick="setAdminRosterMode('going')">Going</button>
+            <button id="rosterTabGk" type="button" onclick="setAdminRosterMode('gk')">GK</button>
+            <button id="rosterTabAll" type="button" onclick="setAdminRosterMode('all')">All</button>
+          </div>
+        </div>
+        <div id="adminPlayers" class="admin-player-list compact"></div>
+      </details>
     </section>
 
-    <!-- Bank config for VietQR payment -->
-    <section class="admin-panel">
-      <div class="section-head compact">
-        <div>
-          <h2>💳 Tài khoản ngân hàng</h2>
-          <p>Cầu thủ quét QR để chuyển tiền sân</p>
-        </div>
-      </div>
+    <details class="admin-panel admin-bank-panel">
+      <summary>
+        <span>Bank account</span>
+        <small id="bankConfigStatus">Not configured</small>
+      </summary>
       <div class="bank-config-form">
         <div>
-          <label class="field-label" for="bankCode">Ngân hàng</label>
-          <select id="bankCode" class="input" style="height:48px">
-            <option value="">— Chọn ngân hàng —</option>
-            <option value="MB">MB Bank (Quân Đội)</option>
+          <label class="field-label" for="bankCode">Bank</label>
+          <select id="bankCode" class="input">
+            <option value="">Select bank</option>
+            <option value="MB">MB Bank</option>
             <option value="VCB">Vietcombank</option>
             <option value="TCB">Techcombank</option>
             <option value="ACB">ACB</option>
             <option value="VPB">VPBank</option>
             <option value="BIDV">BIDV</option>
-            <option value="ICB">Vietinbank (CTG)</option>
+            <option value="ICB">VietinBank</option>
             <option value="TPB">TPBank</option>
             <option value="HDB">HDBank</option>
             <option value="STB">Sacombank</option>
-            <option value="MSB">MSB Maritime</option>
+            <option value="MSB">MSB</option>
             <option value="VIB">VIB</option>
             <option value="SHB">SHB</option>
             <option value="OCB">OCB</option>
           </select>
         </div>
         <div>
-          <label class="field-label" for="accountNumber">Số tài khoản</label>
-          <input id="accountNumber" class="input" type="text" placeholder="VD: 0123456789" inputmode="numeric">
+          <label class="field-label" for="accountNumber">Account number</label>
+          <input id="accountNumber" class="input" type="text" placeholder="0123456789" inputmode="numeric">
         </div>
         <div>
-          <label class="field-label" for="accountName">Tên chủ tài khoản (in hoa)</label>
-          <input id="accountName" class="input" type="text" placeholder="VD: NGUYEN VAN A" style="text-transform:uppercase">
+          <label class="field-label" for="accountName">Account holder</label>
+          <input id="accountName" class="input" type="text" placeholder="NGUYEN VAN A" style="text-transform:uppercase">
         </div>
-        <button class="btn primary" type="button" onclick="saveBankConfig()" style="min-height:48px">
-          💾 Lưu cấu hình ngân hàng
-        </button>
-        <div id="bankConfigStatus" style="text-align:center;font-size:.84rem;color:var(--muted);min-height:20px"></div>
+        <button class="btn primary btn-block" type="button" onclick="saveBankConfig()">Save bank</button>
       </div>
-    </section>
+    </details>
   </main>
+
+  <!-- Session date picker overlay -->
+  <div id="sessionOverlay" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end" onclick="hideSessionForm()">
+    <div style="background:var(--surface,#fff);border-radius:20px 20px 0 0;padding:24px 20px 40px;width:100%;max-width:480px;margin:0 auto" onclick="event.stopPropagation()">
+      <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:16px">New session</h3>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:5px">Date</label>
+        <input id="sDate" class="input" type="date">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:5px">Time</label>
+        <input id="sTime" class="input" type="time" value="06:30">
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:5px">Location (optional)</label>
+        <input id="sLocation" class="input" type="text" placeholder="Field name / address">
+      </div>
+      <button class="btn primary btn-block" type="button" onclick="confirmOpenPoll()">Open poll</button>
+      <button class="btn btn-block" style="margin-top:8px" type="button" onclick="hideSessionForm()">Cancel</button>
+    </div>
+  </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -105,5 +169,67 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <script src="/js/admin-auth.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => requireAuth(initAdmin));
+
+    function hideSessionForm() {
+      document.getElementById('sessionOverlay').hidden = true;
+    }
+
+    function confirmOpenPoll() {
+      const dateStr  = document.getElementById('sDate').value;
+      const time     = document.getElementById('sTime').value;
+      const location = document.getElementById('sLocation').value.trim();
+      if (!dateStr) { toast('Pick a date.', 'error'); return; }
+      hideSessionForm();
+      openPollWithDate(dateStr, time, location);
+    }
+
+    async function endSessionAndGoPayment() {
+      try {
+        if (!currentSession) {
+          toast('No active session to end.', 'error');
+          return;
+        }
+        await db.collection('sessions').doc(currentSession.id).set({
+          status: 'done',
+          endedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        window.location.href = `/admin/payment.html?sessionId=${encodeURIComponent(currentSession.id)}`;
+      } catch (error) {
+        console.error(error);
+        toast('Failed to end session.', 'error');
+      }
+    }
+
+    function setCapValue(value) {
+      const input = document.getElementById('capInput');
+      input.value = Math.max(3, Math.min(60, Number(value) || 21));
+      updateCapUi();
+    }
+
+    function adjustCap(delta) {
+      const input = document.getElementById('capInput');
+      setCapValue(Number(input.value || 21) + delta);
+    }
+
+    function updateCapUi() {
+      const input = document.getElementById('capInput');
+      const value = Number(input?.value || 21);
+      document.querySelectorAll('.admin-cap-presets button').forEach(btn => {
+        btn.classList.toggle('active', Number(btn.textContent) === value);
+      });
+      const hint = document.getElementById('capHint');
+      if (!hint) return;
+      if (value === 21) hint.textContent = 'Standard 3 teams x 7';
+      else if (value % 3 === 0) hint.textContent = `${value / 3} players per team`;
+      else hint.textContent = `${value} player limit`;
+    }
+
+    document.addEventListener('input', event => {
+      if (event.target?.id === 'capInput') updateCapUi();
+    });
+  </script>
 </body>
 </html>
