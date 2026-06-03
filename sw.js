@@ -1,4 +1,4 @@
-const CACHE = 'football-v6';
+const CACHE = 'football-v9';
 const STATIC = [
   '/',
   '/index.html',
@@ -27,6 +27,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('firestore') || e.request.url.includes('firebase')) return;
+  if (e.request.url.includes('football-data.org') || e.request.url.includes('corsproxy.io')) return;
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
       if (res.ok) {
@@ -38,17 +39,43 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// ── Timer alert notification ──────────────────────────────────────────────────
+// ── Notifications ─────────────────────────────────────────────────────────────
 self.addEventListener('message', event => {
-  if (event.data?.type === 'TIMER_END') {
+  const { type, body } = event.data || {};
+
+  if (type === 'TIMER_END') {
     self.registration.showNotification('⏰ Hết giờ! Đổi đội!', {
-      body: event.data.body || 'Đội chờ vào sân ngay!',
+      body: body || 'Đội chờ vào sân ngay!',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       vibrate: [500, 200, 500, 200, 1000],
       requireInteraction: true,
       tag: 'timer-end',
       renotify: true,
+    });
+  }
+
+  if (type === 'POLL_OPEN') {
+    self.registration.showNotification('⚽ RSVP is open!', {
+      body: body || 'Saturday poll is open — tap to sign up!',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: 'poll-open',
+      renotify: true,
+      data: { url: '/' },
+    });
+  }
+
+  if (type === 'MATCH_ALERT') {
+    self.registration.showNotification('🔥 Big match soon!', {
+      body: body || 'A highlighted match kicks off in 1 hour.',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: 'match-alert',
+      renotify: true,
+      data: { url: '/matches.html' },
     });
   }
 });

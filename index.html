@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Bóng Đá Thứ 7</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#1b4332">
@@ -10,6 +10,96 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* Event screen */
+    .event-hero {
+      background: var(--primary);
+      color: #fff;
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 14px;
+    }
+    .event-hero .event-eyebrow {
+      font-size: .7rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      opacity: .7;
+      margin-bottom: 6px;
+    }
+    .event-hero .event-matchup {
+      font-size: 1.5rem;
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+    .event-hero .event-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: .85rem;
+      opacity: .85;
+    }
+
+    .event-map {
+      border-radius: 16px;
+      overflow: hidden;
+      height: 200px;
+      margin-bottom: 14px;
+      background: #e5e7eb;
+      position: relative;
+    }
+    .event-map iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+    .event-map-label {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,.6);
+      color: #fff;
+      font-size: .75rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      pointer-events: none;
+    }
+
+    .event-rsvp-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .event-rsvp-btn {
+      flex: 1;
+      padding: 13px 0;
+      border-radius: 14px;
+      font-size: .95rem;
+      font-weight: 800;
+      border: 2px solid var(--line);
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .event-rsvp-btn.is-in {
+      background: #d1fae5;
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .event-rsvp-btn.is-out {
+      background: #fee2e2;
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+
+    .squad-section { margin-top: 4px; }
+    .squad-section .going-title-row { margin-bottom: 12px; }
+
+  </style>
 </head>
 <body class="app-shell">
   <header class="topbar">
@@ -18,7 +108,6 @@
       <h1>Bóng Đá Thứ 7</h1>
     </div>
     <div class="topbar-actions">
-      <a href="/schedule.html" class="chip-btn">Schedule</a>
       <button id="langToggle" class="chip-btn" type="button">EN</button>
       <span id="statusBadge" class="status-badge is-open">Open</span>
     </div>
@@ -35,6 +124,7 @@
       <p data-i18n="noSessionBody">Admin mở poll để mọi người đăng ký.</p>
     </section>
 
+    <!-- Weekly session poll -->
     <section id="pollContent" hidden>
       <article id="counterCard" class="counter-card">
         <p id="sessionDate" class="session-date">--</p>
@@ -82,13 +172,231 @@
         <div id="teamCards" class="team-stack"></div>
       </section>
     </section>
+
+    <!-- Event / friendly match screen -->
+    <section id="eventContent" hidden>
+
+      <!-- Match info -->
+      <div class="event-hero">
+        <p class="event-eyebrow" id="eventEyebrow">Friendly Match</p>
+        <h2 class="event-matchup" id="eventMatchup">vs --</h2>
+        <div class="event-details">
+          <span id="eventDateLine"></span>
+          <span id="eventTimeLine" hidden></span>
+        </div>
+      </div>
+
+      <!-- Google Maps embed -->
+      <div class="event-map" id="eventMapWrap" hidden>
+        <iframe id="eventMapFrame" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <span class="event-map-label" id="eventMapLabel"></span>
+      </div>
+
+      <!-- RSVP -->
+      <div class="event-rsvp-row">
+        <button class="event-rsvp-btn" id="eventInBtn" type="button">✓ Tôi đi</button>
+        <button class="event-rsvp-btn" id="eventOutBtn" type="button">✗ Không đi được</button>
+      </div>
+
+      <!-- Squad / team sheet -->
+      <section class="squad-section going-section">
+        <div class="going-title-row">
+          <h2>Squad</h2>
+          <span id="eventGoingBadge" class="pill">0</span>
+        </div>
+        <ul id="eventGoingList" class="going-list"></ul>
+      </section>
+
+    </section>
   </main>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <script src="/js/rsvp.js?v=6"></script>
+  <script>
+    (function initEventPoll() {
+      let activeEvent = null;
+      let eventRsvps = {};
+      let rsvpUnsub = null;
+      let configUnsub = null;
+      let lastEventId = null;
+
+      configUnsub = db.collection('config').doc('app').onSnapshot(async snap => {
+        const data = snap.data() || {};
+        const eventId = data.currentEventId || null;
+
+        if (!eventId) {
+          // Event deactivated — clean up and let session module take over
+          if (rsvpUnsub) { rsvpUnsub(); rsvpUnsub = null; }
+          activeEvent = null;
+          lastEventId = null;
+          document.getElementById('eventContent').hidden = true;
+          return;
+        }
+
+        // Same event still active — no need to re-render
+        if (eventId === lastEventId) return;
+        lastEventId = eventId;
+
+        const doc = await db.collection('events').doc(eventId).get();
+        if (!doc.exists || doc.data().status === 'cancelled') return;
+
+        activeEvent = { id: doc.id, ...doc.data() };
+
+        document.getElementById('pollContent').hidden = true;
+        document.getElementById('emptyState').hidden = true;
+        document.getElementById('loadingState').hidden = true;
+        document.getElementById('eventContent').hidden = false;
+
+        renderEventInfo();
+        subscribeRsvps();
+      });
+
+      window.addEventListener('beforeunload', () => {
+        if (configUnsub) configUnsub();
+        if (rsvpUnsub) rsvpUnsub();
+      });
+
+      function renderEventInfo() {
+        const ev = activeEvent;
+        const d = ev.date?.toDate ? ev.date.toDate() : new Date(ev.date);
+
+        document.getElementById('eventEyebrow').textContent =
+          ev.type === 'friendly' ? 'Friendly Match' : 'Sự kiện';
+        document.getElementById('eventMatchup').textContent =
+          ev.opponent ? `vs ${ev.opponent}` : (ev.title || 'Event');
+
+        document.getElementById('eventDateLine').textContent =
+          d.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+        const timeLine = document.getElementById('eventTimeLine');
+        if (ev.time) {
+          timeLine.textContent = `🕐 ${ev.time}`;
+          timeLine.hidden = false;
+        } else {
+          timeLine.hidden = true;
+        }
+
+        // Google Maps embed
+        const mapWrap = document.getElementById('eventMapWrap');
+        if (ev.location) {
+          document.getElementById('eventMapFrame').src = buildMapSrc(ev.location);
+          document.getElementById('eventMapLabel').textContent = `📍 ${mapDisplayName(ev.location)}`;
+          mapWrap.hidden = false;
+        } else {
+          mapWrap.hidden = true;
+        }
+
+        document.getElementById('eventInBtn').onclick = () => rsvpEvent('in');
+        document.getElementById('eventOutBtn').onclick = () => rsvpEvent('out');
+      }
+
+      function subscribeRsvps() {
+        if (rsvpUnsub) rsvpUnsub();
+        rsvpUnsub = db.collection('events').doc(activeEvent.id).collection('rsvps')
+          .onSnapshot(snap => {
+            eventRsvps = {};
+            snap.docs.forEach(d => { eventRsvps[d.id] = d.data(); });
+            renderRsvps();
+          });
+      }
+
+      function renderRsvps() {
+        const identity = getIdentity();
+        const myStatus = identity?.playerId ? (eventRsvps[identity.playerId]?.status || null) : null;
+
+        document.getElementById('eventInBtn').className =
+          `event-rsvp-btn${myStatus === 'in' ? ' is-in' : ''}`;
+        document.getElementById('eventOutBtn').className =
+          `event-rsvp-btn${myStatus === 'out' ? ' is-out' : ''}`;
+
+        const going = Object.values(eventRsvps)
+          .filter(r => r.status === 'in')
+          .sort((a, b) => (a.playerName || '').localeCompare(b.playerName || '', 'vi'));
+
+        document.getElementById('eventGoingBadge').textContent = going.length;
+
+        document.getElementById('eventGoingList').innerHTML = going.length
+          ? going.map((r, i) => `
+              <li class="going-player">
+                <span class="roster-number">${String(i + 1).padStart(2, '0')}</span>
+                <span class="player-avatar">${initials(r.playerName)}</span>
+                <span class="going-name">
+                  <span class="going-name-text">${esc(r.playerName || 'No name')}</span>
+                  ${identity?.playerId === r.playerId ? '<span class="you-badge">Bạn</span>' : ''}
+                </span>
+              </li>`).join('')
+          : '<li class="going-empty">Chưa ai đăng ký</li>';
+      }
+
+      async function rsvpEvent(status) {
+        const identity = getIdentity();
+        if (!identity?.playerId || !activeEvent) { toast('Vui lòng đăng nhập.', 'error'); return; }
+        try {
+          await db.collection('events').doc(activeEvent.id).collection('rsvps')
+            .doc(identity.playerId).set({
+              status,
+              playerName: identity.name,
+              playerId: identity.playerId,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+          toast(status === 'in' ? '✓ Đã đăng ký!' : 'Đã cập nhật.', 'success');
+        } catch(e) { toast('Lỗi lưu.', 'error'); }
+      }
+
+      function buildMapSrc(location) {
+        try {
+          const url = new URL(location);
+          if (url.hostname.includes('google.com') || url.hostname.includes('goo.gl')) {
+            // Extract @lat,lng from place URLs
+            const atMatch = url.pathname.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+            if (atMatch) {
+              return `https://maps.google.com/maps?q=${atMatch[1]},${atMatch[2]}&output=embed&hl=vi&z=17`;
+            }
+            // Extract q= param
+            const q = url.searchParams.get('q');
+            if (q) return `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed&hl=vi&z=16`;
+          }
+        } catch(_) {}
+        // Plain text address
+        return `https://maps.google.com/maps?q=${encodeURIComponent(location)}&output=embed&hl=vi&z=16`;
+      }
+
+      function mapDisplayName(location) {
+        try {
+          const url = new URL(location);
+          if (url.hostname.includes('google.com') || url.hostname.includes('goo.gl')) {
+            // Try to extract place name from URL path e.g. /maps/place/Sân+Mỹ+Đình/
+            const placeMatch = url.pathname.match(/\/place\/([^/@]+)/);
+            if (placeMatch) return decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+            const q = url.searchParams.get('q');
+            if (q) return q;
+            return 'Google Maps';
+          }
+        } catch(_) {}
+        return location;
+      }
+
+      function getIdentity() {
+        try { return JSON.parse(localStorage.getItem('bdt7_player') || 'null'); } catch(_) { return null; }
+      }
+      function initials(name) {
+        const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        return (parts.length > 1 ? parts[0][0] + parts[parts.length-1][0] : parts[0]?.slice(0,2) || '?').toUpperCase();
+      }
+      function esc(str) {
+        return String(str || '').replace(/[&<>"']/g, c =>
+          ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+      }
+      function toast(msg, type) {
+        const el = document.getElementById('toast');
+        el.textContent = msg; el.className = `toast show ${type}`;
+        clearTimeout(el._t); el._t = setTimeout(() => el.className = 'toast', 2200);
+      }
+    })();
+  </script>
 </body>
 </html>

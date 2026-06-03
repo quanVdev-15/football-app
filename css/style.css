@@ -46,6 +46,8 @@ button {
 .app-shell {
   max-width: 480px;
   margin: 0 auto;
+  /* safe area for iPhone home bar */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .topbar {
@@ -56,7 +58,8 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 16px 14px;
+  /* extend into iPhone notch/Dynamic Island area */
+  padding: calc(18px + env(safe-area-inset-top)) 16px 14px;
   background: var(--primary);
   color: #fff;
   box-shadow: 0 8px 22px rgba(12, 38, 26, .2);
@@ -2955,3 +2958,45 @@ button {
   color: var(--text);
   font-weight: 950;
 }
+
+/* Upcoming events on main screen */
+.upcoming-section {
+  margin-top: 24px;
+}
+
+.sched-list { display: flex; flex-direction: column; gap: 12px; }
+
+.sched-card {
+  display: flex; gap: 14px; align-items: flex-start;
+  background: var(--card, #fff);
+  border-radius: 16px;
+  padding: 16px;
+  text-decoration: none; color: inherit;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.sched-card-date {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 40px; text-align: center;
+  padding-top: 2px;
+}
+.sched-card-date .day-name { font-size: .7rem; font-weight: 700; color: var(--text-muted, #6b7280); text-transform: uppercase; }
+.sched-card-date .day-num  { font-size: 1.6rem; font-weight: 900; line-height: 1; color: var(--text, #111); }
+.sched-card-date .month    { font-size: .7rem; font-weight: 600; color: var(--text-muted, #6b7280); text-transform: uppercase; }
+
+.sched-card-body { flex: 1; min-width: 0; }
+.sched-card-body h3 { font-size: 1rem; font-weight: 800; margin: 6px 0 4px; }
+.sched-card-body p  { font-size: .82rem; color: var(--text-muted, #6b7280); margin: 0 0 3px; }
+
+.sched-card-friendly { border-left: 4px solid #e65100; }
+.badge-friendly { background: #fff3e0; color: #e65100; }
+.going-count { font-size: .78rem; color: var(--text-muted, #6b7280); margin-top: 6px; }
+
+.rsvp-row { display: flex; gap: 8px; margin-top: 10px; }
+.rsvp-btn {
+  flex: 1; padding: 9px 0; border: 1.5px solid #e5e7eb; border-radius: 10px;
+  font-size: .85rem; font-weight: 700; background: #f9fafb; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.rsvp-btn.is-in  { background: #d1fae5; border-color: var(--primary, #2d6a4f); color: var(--primary, #2d6a4f); }
+.rsvp-btn.is-out { background: #fee2e2; border-color: #ef4444; color: #ef4444; }

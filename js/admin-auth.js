@@ -147,7 +147,7 @@ function pinSuccess(onSuccess) {
 
 function logoutAdmin() {
   localStorage.removeItem(ADMIN_AUTH_KEY);
-  location.reload();
+  location.href = '/';
 }
 
 async function initAdmin() {

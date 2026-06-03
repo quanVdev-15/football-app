@@ -4,7 +4,15 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "test-seed.html",
+      "test-payment-flow.js",
+      "tests/**",
+      "test-results/**",
+      "playwright-report/**",
+      ".agents/**",
+      ".claude/**",
+      "skills-lock.json"
     ]
   },
   "firestore": {

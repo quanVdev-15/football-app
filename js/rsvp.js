@@ -117,6 +117,13 @@ async function init() {
   applyI18n();
 
   try {
+    // If admin has pushed an event live, let the event module handle the UI
+    const config = await db.collection('config').doc('app').get();
+    if (config.exists && config.data().currentEventId) {
+      hide('loadingState');
+      return;
+    }
+
     session = await getActiveSession();
     hide('loadingState');
 
@@ -161,13 +168,9 @@ async function getActiveSession() {
   const currentSessionId = config.exists ? config.data().currentSessionId : null;
   if (currentSessionId) {
     const doc = await db.collection('sessions').doc(currentSessionId).get();
-    if (doc.exists) return { id: doc.id, ...doc.data() };
+    if (doc.exists && doc.data().status !== 'done') return { id: doc.id, ...doc.data() };
   }
-
-  const latest = await db.collection('sessions').orderBy('date', 'desc').limit(1).get();
-  if (latest.empty) return null;
-  const doc = latest.docs[0];
-  return { id: doc.id, ...doc.data() };
+  return null;
 }
 
 function subscribeSession() {
