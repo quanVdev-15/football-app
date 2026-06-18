@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Phân Đội — Admin</title>
   <meta name="theme-color" content="#1b4332">
   <link rel="stylesheet" href="/css/style.css">
@@ -46,10 +46,6 @@
     <div id="playerChips" class="teams-player-preview"></div>
   </section>
 
-  <!-- Remix controls -->
-  <section id="remixCard" class="teams-action-panel" style="display:none">
-    <button class="btn primary btn-block" onclick="doRemix()">Randomize teams</button>
-  </section>
 
   <!-- GK warning -->
   <div id="gkWarning" class="teams-warning" style="display:none">
@@ -58,14 +54,13 @@
   </div>
 
   <!-- Teams result -->
-  <div id="teamsResult" style="display:none">
+  <div id="teamsResult" style="display:none;padding-bottom:80px">
     <div id="teamCards" class="teams-admin-grid"></div>
-    <div class="teams-sticky-actions">
-      <button class="btn secondary btn-block" onclick="doRemix()">Reshuffle</button>
-      <button class="btn btn-success btn-block" id="confirmBtn" onclick="confirmTeams()">
-        Confirm teams
-      </button>
-    </div>
+  </div>
+  <div class="teams-sticky-actions" id="confirmBar" style="display:none">
+    <button class="btn btn-success btn-block" id="confirmBtn" onclick="confirmTeams()">
+      Xác nhận đội
+    </button>
   </div>
 
 </main>
@@ -130,7 +125,6 @@ async function init() {
   }
 
   document.getElementById('summaryCard').style.display = '';
-  document.getElementById('remixCard').style.display = '';
   renderSummary();
 
   // If teams already confirmed, show them read-only
@@ -139,10 +133,20 @@ async function init() {
     if (!teamsSnap.empty) {
       const existing = teamsSnap.docs.map(d => ({ ...d.data(), _saved: true }));
       renderTeamCards(existing);
-      document.getElementById('teamsResult').style.display = '';
-      document.getElementById('confirmBtn').textContent = 'Save new teams';
+      showTeamsResult('Lưu đội mới');
+      return;
     }
   }
+
+  // Auto-shuffle on first load
+  doRemix();
+}
+
+function showTeamsResult(confirmLabel) {
+  document.getElementById('summaryCard').style.display = 'none';
+  document.getElementById('teamsResult').style.display = '';
+  document.getElementById('confirmBar').style.display = '';
+  document.getElementById('confirmBtn').textContent = confirmLabel || 'Xác nhận đội';
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
@@ -180,8 +184,7 @@ function doRemix() {
   }
 
   renderTeamCards(teams);
-  document.getElementById('teamsResult').style.display = '';
-  document.getElementById('confirmBtn').textContent = 'Confirm teams';
+  showTeamsResult('Xác nhận đội');
 
   const tc = document.getElementById('teamCards');
   tc.classList.remove('remix-flash');

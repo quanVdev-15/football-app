@@ -493,7 +493,6 @@ function applyAdminI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = at(el.dataset.i18n);
   });
-  document.getElementById('adminLangToggle').textContent = adminLang === 'vi' ? 'EN' : 'VI';
 }
 
 function at(key) {
@@ -524,10 +523,10 @@ function toDate(value) {
 
 function formatAdminDate(date) {
   if (!date) return '--';
-  return new Intl.DateTimeFormat(adminLang === 'vi' ? 'vi-VN' : 'en-US', {
+  return new Intl.DateTimeFormat('vi-VN', {
     weekday: 'long',
     day: '2-digit',
-    month: 'short',
+    month: 'long',
     year: 'numeric',
   }).format(date);
 }

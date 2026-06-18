@@ -1,38 +1,110 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Events — Admin</title>
   <meta name="theme-color" content="#1b4332">
   <link rel="stylesheet" href="/css/style.css">
   <style>
     .event-card {
-      display: flex; align-items: center; gap: 12px;
-      background: var(--surface, #fff);
-      border-radius: 14px; padding: 14px 16px;
+      background: var(--card);
+      border-radius: 14px;
+      padding: 14px 16px;
       margin-bottom: 10px;
       box-shadow: 0 1px 4px rgba(0,0,0,.07);
       border-left: 4px solid #e65100;
+      transition: border-color .2s;
+    }
+    .event-card.is-live {
+      border-left-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--primary), 0 2px 8px rgba(0,0,0,.1);
+    }
+
+    .event-card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
     }
     .event-card-body { flex: 1; min-width: 0; }
-    .event-card-body strong { display: block; font-size: .95rem; }
-    .event-card-body span   { font-size: .78rem; color: var(--text-muted, #6b7280); }
+    .event-card-body strong { display: block; font-size: .95rem; font-weight: 800; }
+    .event-card-body .event-meta { font-size: .78rem; color: var(--muted); margin-top: 3px; }
+
+    .live-badge {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 20px;
+      margin-top: 5px;
+    }
+
+    .event-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .event-actions .btn {
+      flex: 1;
+      padding: 9px 0;
+      font-size: .82rem;
+    }
 
     .form-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,.5);
       z-index: 200; display: flex; align-items: flex-end;
     }
     .form-sheet {
-      background: var(--surface, #fff);
+      background: var(--card);
       border-radius: 20px 20px 0 0;
       padding: 24px 20px 40px;
       width: 100%; max-width: 480px; margin: 0 auto;
     }
     .form-sheet h3 { font-size: 1.1rem; font-weight: 800; margin-bottom: 16px; }
     .form-field { margin-bottom: 12px; }
-    .form-field label { display: block; font-size: .75rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: .5px; color: #6b7280; margin-bottom: 5px; }
+    .form-field label {
+      display: block; font-size: .75rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px;
+      color: var(--muted); margin-bottom: 5px;
+    }
+    .form-field .hint {
+      font-size: .72rem; color: var(--muted); margin-top: 4px;
+    }
+
+    .empty-events {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+
+    .date-quick-row, .time-quick-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .date-quick-btn, .time-quick-btn {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 8px;
+      border-radius: 10px;
+      border: 1.5px solid var(--line);
+      background: var(--bg);
+      color: var(--text);
+      font-size: .85rem;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 44px;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .date-quick-btn.is-active, .time-quick-btn.is-active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
   </style>
 </head>
 <body class="app-shell admin-page">
@@ -49,38 +121,47 @@
   <main class="page" id="adminContent" hidden>
     <button class="btn primary btn-block" type="button" onclick="showForm()">+ New friendly match</button>
 
-    <div id="eventsList" style="margin-top:16px">
-      <div class="state-card"><div class="spinner"></div><p>Loading...</p></div>
-    </div>
+    <div id="eventsList" style="margin-top:16px"></div>
   </main>
 
-  <!-- Create form overlay -->
   <div id="formOverlay" class="form-overlay" hidden onclick="hideForm()">
     <div class="form-sheet" onclick="event.stopPropagation()">
       <h3>New friendly match</h3>
 
       <div class="form-field">
         <label>Opponent</label>
-        <input id="fOpponent" class="input" type="text" placeholder="Team name">
+        <input id="fOpponent" class="input" type="text" placeholder="e.g. FC Đối Kháng">
       </div>
       <div class="form-field">
-        <label>Date</label>
-        <input id="fDate" class="input" type="date">
+        <label>Ngày thi đấu</label>
+        <div class="date-quick-row">
+          <button type="button" class="date-quick-btn" onclick="setQuickDate(0)">Thứ 7 này</button>
+          <button type="button" class="date-quick-btn" onclick="setQuickDate(1)">Thứ 7 sau</button>
+        </div>
+        <input id="fDate" class="input" type="date" style="margin-top:8px" onchange="updateDateQuickBtns()">
       </div>
       <div class="form-field">
-        <label>Time</label>
-        <input id="fTime" class="input" type="time" value="06:30">
+        <label>Giờ thi đấu</label>
+        <div class="time-quick-row">
+          <button type="button" class="time-quick-btn" onclick="setTime('06:00')">6:00</button>
+          <button type="button" class="time-quick-btn" onclick="setTime('06:30')">6:30</button>
+          <button type="button" class="time-quick-btn" onclick="setTime('07:00')">7:00</button>
+          <button type="button" class="time-quick-btn" onclick="setTime('07:30')">7:30</button>
+          <button type="button" class="time-quick-btn" onclick="setTime('08:00')">8:00</button>
+        </div>
+        <input id="fTime" class="input" type="time" value="06:30" style="margin-top:8px">
       </div>
       <div class="form-field">
         <label>Location</label>
-        <input id="fLocation" class="input" type="text" placeholder="Field name / address">
+        <input id="fLocation" class="input" type="text" placeholder="Address or paste a Google Maps link">
+        <p class="hint">Type an address, or paste a Google Maps link — the map will show automatically on the player screen</p>
       </div>
       <div class="form-field" style="margin-bottom:20px">
         <label>Note (optional)</label>
         <input id="fNote" class="input" type="text" placeholder="e.g. Bring bibs">
       </div>
 
-      <button class="btn primary btn-block" type="button" onclick="createEvent()">Create event</button>
+      <button class="btn primary btn-block" type="button" onclick="saveNewEvent()">Create event</button>
       <button class="btn btn-block" style="margin-top:8px" type="button" onclick="hideForm()">Cancel</button>
     </div>
   </div>
@@ -95,9 +176,29 @@
     window.addEventListener('DOMContentLoaded', () => requireAuth(initEvents));
 
     let allEvents = [];
+    let activeEventId = null;
 
     function initEvents() {
       document.getElementById('adminContent').hidden = false;
+
+      // Event delegation — handles push, deactivate, cancel buttons
+      document.getElementById('eventsList').addEventListener('click', e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const card = btn.closest('[data-id]');
+        const id = card?.dataset.id;
+        const action = btn.dataset.action;
+        if (action === 'push' && id) pushToPlayers(id);
+        else if (action === 'deactivate') deactivateEvent();
+        else if (action === 'cancel' && id) cancelEvent(id);
+      });
+
+      // Watch which event is currently live
+      db.collection('config').doc('app').onSnapshot(snap => {
+        activeEventId = snap.data()?.currentEventId || null;
+        renderEvents();
+      });
+
       const todayStart = new Date(); todayStart.setHours(0,0,0,0);
       db.collection('events')
         .where('date', '>=', firebase.firestore.Timestamp.fromDate(todayStart))
@@ -116,43 +217,102 @@
       const visible = allEvents.filter(e => e.status !== 'cancelled');
 
       if (!visible.length) {
-        list.innerHTML = '<div class="state-card"><p>No upcoming friendly matches.</p></div>';
+        list.innerHTML = '<div class="empty-events"><p>No upcoming friendly matches.</p></div>';
         return;
       }
 
       list.innerHTML = visible.map(ev => {
         const d = ev.date?.toDate ? ev.date.toDate() : new Date(ev.date);
-        const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        const dateStr = d.toLocaleDateString('vi-VN', { weekday: 'short', day: 'numeric', month: 'numeric' });
         const meta = [dateStr, ev.time, ev.location].filter(Boolean).join(' · ');
-        return `<div class="event-card">
-          <div class="event-card-body">
-            <strong>vs ${esc(ev.opponent || 'TBD')}</strong>
-            <span>${esc(meta)}</span>
-            ${ev.note ? `<span>${esc(ev.note)}</span>` : ''}
+        const isLive = ev.id === activeEventId;
+
+        return `<div class="event-card ${isLive ? 'is-live' : ''}" data-id="${esc(ev.id)}">
+          <div class="event-card-top">
+            <div class="event-card-body">
+              <strong>vs ${esc(ev.opponent || 'TBD')}</strong>
+              <p class="event-meta">${esc(meta)}</p>
+              ${ev.note ? `<p class="event-meta">${esc(ev.note)}</p>` : ''}
+              ${isLive ? '<span class="live-badge">● Live on player screen</span>' : ''}
+            </div>
           </div>
-          <button class="chip-btn danger" type="button" onclick="cancelEvent('${ev.id}')">Cancel</button>
+          <div class="event-actions">
+            ${isLive
+              ? `<button class="btn btn-block danger" type="button" data-action="deactivate">Deactivate</button>`
+              : `<button class="btn primary" type="button" data-action="push">Push to players</button>`
+            }
+            <button class="btn btn-danger" type="button" data-action="cancel">Cancel</button>
+          </div>
         </div>`;
       }).join('');
     }
 
+    async function pushToPlayers(id) {
+      try {
+        await db.collection('config').doc('app').set({
+          currentEventId: id,
+          currentSessionId: null,
+        }, { merge: true });
+        toast('Event is now live on player screen!', 'success');
+      } catch(e) {
+        console.error(e);
+        toast('Failed to push event.', 'error');
+      }
+    }
+
+    async function deactivateEvent() {
+      try {
+        await db.collection('config').doc('app').set({
+          currentEventId: null,
+        }, { merge: true });
+        toast('Event deactivated. Player screen is now empty.', 'success');
+      } catch(e) {
+        toast('Failed to deactivate.', 'error');
+      }
+    }
+
     function showForm() {
-      // Default to next Saturday
-      const d = new Date();
-      const daysToSat = (6 - d.getDay() + 7) % 7 || 7;
-      d.setDate(d.getDate() + daysToSat);
-      document.getElementById('fDate').value = d.toISOString().slice(0, 10);
+      setQuickDate(0);
       document.getElementById('fOpponent').value = '';
       document.getElementById('fLocation').value = '';
       document.getElementById('fNote').value = '';
-      document.getElementById('fTime').value = '06:30';
+      setTime('06:30');
       document.getElementById('formOverlay').hidden = false;
+      updateDateQuickBtns();
+    }
+
+    function setQuickDate(weeksAhead) {
+      const d = new Date();
+      const daysToSat = (6 - d.getDay() + 7) % 7 || 7;
+      d.setDate(d.getDate() + daysToSat + weeksAhead * 7);
+      document.getElementById('fDate').value = d.toISOString().slice(0, 10);
+      updateDateQuickBtns();
+    }
+
+    function updateDateQuickBtns() {
+      const val = document.getElementById('fDate').value;
+      const btns = document.querySelectorAll('.date-quick-btn');
+      btns.forEach((btn, i) => {
+        const d = new Date();
+        const daysToSat = (6 - d.getDay() + 7) % 7 || 7;
+        d.setDate(d.getDate() + daysToSat + i * 7);
+        btn.classList.toggle('is-active', val === d.toISOString().slice(0, 10));
+      });
+    }
+
+    function setTime(val) {
+      document.getElementById('fTime').value = val;
+      document.querySelectorAll('.time-quick-btn').forEach(btn => {
+        const btnTime = btn.getAttribute('onclick').match(/'(.+)'/)?.[1];
+        btn.classList.toggle('is-active', btnTime === val);
+      });
     }
 
     function hideForm() {
       document.getElementById('formOverlay').hidden = true;
     }
 
-    async function createEvent() {
+    async function saveNewEvent() {
       const opponent = document.getElementById('fOpponent').value.trim();
       const dateStr  = document.getElementById('fDate').value;
       const time     = document.getElementById('fTime').value;
@@ -183,6 +343,10 @@
     }
 
     async function cancelEvent(id) {
+      if (id === activeEventId) {
+        toast('Deactivate this event first before cancelling.', 'error');
+        return;
+      }
       if (!confirm('Cancel this friendly match?')) return;
       try {
         await db.collection('events').doc(id).update({ status: 'cancelled' });
@@ -195,6 +359,12 @@
     function esc(str) {
       return String(str || '').replace(/[&<>"']/g, c =>
         ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    }
+
+    function toast(msg, type) {
+      const el = document.getElementById('toast');
+      el.textContent = msg; el.className = `toast show ${type}`;
+      clearTimeout(el._t); el._t = setTimeout(() => el.className = 'toast', 2400);
     }
   </script>
 </body>

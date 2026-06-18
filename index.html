@@ -108,7 +108,6 @@
       <h1>Bóng Đá Thứ 7</h1>
     </div>
     <div class="topbar-actions">
-      <button id="langToggle" class="chip-btn" type="button">EN</button>
       <span id="statusBadge" class="status-badge is-open">Open</span>
     </div>
   </header>
@@ -123,6 +122,9 @@
       <h2 data-i18n="noSessionTitle">Chưa có buổi đá</h2>
       <p data-i18n="noSessionBody">Admin mở poll để mọi người đăng ký.</p>
     </section>
+
+    <!-- Event banner (shows above poll when a friendly is live) -->
+    <div id="eventBanner" hidden></div>
 
     <!-- Weekly session poll -->
     <section id="pollContent" hidden>
@@ -155,12 +157,6 @@
         <ul id="goingListItems" class="going-list"></ul>
       </section>
 
-      <section id="paySection" hidden>
-        <a id="payLink" href="/payment.html" class="pay-section-link">
-          <span>💰 Thanh toán tiền sân</span>
-          <span class="pay-section-badge">35,000đ →</span>
-        </a>
-      </section>
 
       <section id="teamsSection" class="teams-section" hidden>
         <div class="section-head">
@@ -215,7 +211,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/js/rsvp.js?v=6"></script>
+  <script src="/js/rsvp.js?v=9"></script>
   <script>
     (function initEventPoll() {
       let activeEvent = null;

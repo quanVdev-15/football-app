@@ -43,10 +43,7 @@
           <span>Split teams</span>
           <strong>Teams</strong>
         </a>
-        <a class="admin-action-card money" href="/admin/monthly.html">
-          <span>Monthly fee</span>
-          <strong>150k</strong>
-        </a>
+
         <a class="admin-action-card" href="/admin/events.html">
           <span>Friendlies</span>
           <strong>Events</strong>
@@ -72,13 +69,6 @@
       </div>
     </section>
 
-    <section class="admin-danger-strip">
-      <div>
-        <strong>End session</strong>
-        <span>Move to payment collection and debt recording.</span>
-      </div>
-      <button class="btn btn-danger" type="button" onclick="endSessionAndGoPayment()">Collect</button>
-    </section>
 
     <section class="admin-panel admin-roster-panel">
       <div class="admin-panel-title">
@@ -103,43 +93,7 @@
       </details>
     </section>
 
-    <details class="admin-panel admin-bank-panel">
-      <summary>
-        <span>Bank account</span>
-        <small id="bankConfigStatus">Not configured</small>
-      </summary>
-      <div class="bank-config-form">
-        <div>
-          <label class="field-label" for="bankCode">Bank</label>
-          <select id="bankCode" class="input">
-            <option value="">Select bank</option>
-            <option value="MB">MB Bank</option>
-            <option value="VCB">Vietcombank</option>
-            <option value="TCB">Techcombank</option>
-            <option value="ACB">ACB</option>
-            <option value="VPB">VPBank</option>
-            <option value="BIDV">BIDV</option>
-            <option value="ICB">VietinBank</option>
-            <option value="TPB">TPBank</option>
-            <option value="HDB">HDBank</option>
-            <option value="STB">Sacombank</option>
-            <option value="MSB">MSB</option>
-            <option value="VIB">VIB</option>
-            <option value="SHB">SHB</option>
-            <option value="OCB">OCB</option>
-          </select>
-        </div>
-        <div>
-          <label class="field-label" for="accountNumber">Account number</label>
-          <input id="accountNumber" class="input" type="text" placeholder="0123456789" inputmode="numeric">
-        </div>
-        <div>
-          <label class="field-label" for="accountName">Account holder</label>
-          <input id="accountName" class="input" type="text" placeholder="NGUYEN VAN A" style="text-transform:uppercase">
-        </div>
-        <button class="btn primary btn-block" type="button" onclick="saveBankConfig()">Save bank</button>
-      </div>
-    </details>
+
   </main>
 
   <!-- Session date picker overlay -->
@@ -209,7 +163,7 @@
 
     function sendPollNotification(dateStr) {
       if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
-      const label = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      const label = new Date(dateStr + 'T00:00:00').toLocaleDateString('vi-VN', { weekday: 'short', day: 'numeric', month: 'numeric' });
       navigator.serviceWorker.ready.then(reg => {
         reg.active?.postMessage({
           type: 'POLL_OPEN',

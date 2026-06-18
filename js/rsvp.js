@@ -99,7 +99,7 @@ const txt = {
   }
 };
 
-let lang = localStorage.getItem(LANG_KEY) || 'vi';
+const lang = 'vi';
 let session = null;
 let rsvps = {};
 let teams = [];
@@ -113,15 +113,17 @@ window.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   document.documentElement.lang = lang;
-  document.getElementById('langToggle').addEventListener('click', toggleLang);
   applyI18n();
 
   try {
-    // If admin has pushed an event live, let the event module handle the UI
     const config = await db.collection('config').doc('app').get();
-    if (config.exists && config.data().currentEventId) {
-      hide('loadingState');
-      return;
+    const configData = config.exists ? config.data() : {};
+
+    // Load event banner if a friendly is live (but still show the poll)
+    if (configData.currentEventId) {
+      db.collection('events').doc(configData.currentEventId).get().then(evDoc => {
+        if (evDoc.exists) renderEventBanner(evDoc.data());
+      });
     }
 
     session = await getActiveSession();
@@ -144,23 +146,34 @@ async function init() {
   }
 }
 
-function toggleLang() {
-  lang = lang === 'vi' ? 'en' : 'vi';
-  localStorage.setItem(LANG_KEY, lang);
-  document.documentElement.lang = lang;
-  applyI18n();
-  renderAll();
-}
-
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.dataset.i18n);
   });
-  document.getElementById('langToggle').textContent = lang === 'vi' ? 'EN' : 'VI';
 }
 
 function t(key) {
   return txt[lang][key] || txt.en[key] || key;
+}
+
+function renderEventBanner(ev) {
+  const banner = document.getElementById('eventBanner');
+  if (!banner) return;
+  const d = ev.date?.toDate ? ev.date.toDate() : new Date(ev.date);
+  const dateStr = d.toLocaleDateString('vi-VN', { weekday: 'short', day: 'numeric', month: 'numeric' });
+  const meta = [dateStr, ev.time, ev.location].filter(Boolean).join(' · ');
+  banner.innerHTML = `
+    <div class="event-banner-card">
+      <span class="event-banner-dot"></span>
+      <div class="event-banner-body">
+        <p class="event-banner-label">Giao hữu hôm nay</p>
+        <p class="event-banner-title">vs ${esc(ev.opponent || 'TBD')}</p>
+        ${meta ? `<p class="event-banner-meta">${esc(meta)}</p>` : ''}
+        ${ev.note ? `<p class="event-banner-meta">${esc(ev.note)}</p>` : ''}
+      </div>
+    </div>
+  `;
+  banner.hidden = false;
 }
 
 async function getActiveSession() {
@@ -275,8 +288,7 @@ function renderPageMode() {
   document.getElementById('counterCard').hidden = teamMateMode;
   document.getElementById('myRsvpBlock').hidden = teamMateMode || shouldHideMyRsvp();
   document.getElementById('goingListBlock').hidden = teamMateMode;
-  const paySection = document.getElementById('paySection');
-  if (paySection) paySection.hidden = !teamMateMode;
+
 }
 
 function renderMyRsvp() {
@@ -307,19 +319,13 @@ function renderGoingList() {
 
   list.innerHTML = confirmed.length ? confirmed.map((player, index) => {
     const isMe = isCurrentPlayer(player, identity);
-    return `
-    <li class="going-player ${isMe ? 'is-me' : ''}" style="--stagger: ${index}">
-      <span class="roster-number">${String(index + 1).padStart(2, '0')}</span>
-      <span class="player-avatar">${initials(playerName(player))}</span>
-      <span class="going-name">
-        <span class="going-name-text">${esc(playerName(player) || 'No name')}</span>
-        <span class="going-badges">
-          ${isMe ? `<span class="you-badge">${t('you')}</span>` : ''}
-          ${isPlayerGk(player) ? `<span class="gk-badge">${t('gk')}</span>` : ''}
-        </span>
-      </span>
-    </li>
-  `;
+    const isGk = isPlayerGk(player);
+    return `<li class="name-chip ${isMe ? 'is-me' : ''}" style="--stagger:${index}">
+      <span class="name-chip-num">${String(index + 1).padStart(2, '0')}</span>
+      <span class="name-chip-text">${esc(playerName(player) || '?')}</span>
+      ${isGk ? `<span class="name-chip-gk">GK</span>` : ''}
+      ${isMe ? `<span class="name-chip-you">Bạn</span>` : ''}
+    </li>`;
   }).join('') : `<li class="going-empty">${t('emptyGoing')}</li>`;
 }
 
@@ -360,15 +366,9 @@ function renderTeams() {
       isMine,
       page: activeIndex + 1,
       total: normalized.length,
-      revealed: revealedTeamIds.has(activeTeam.id),
     })}
     ${normalized.length > 1 ? renderTeamPager(activeIndex + 1, normalized.length, isMine) : ''}
   `;
-
-  stack.querySelector('[data-reveal-team]')?.addEventListener('click', () => {
-    revealedTeamIds.add(activeTeam.id);
-    renderTeams();
-  });
 
   stack.querySelectorAll('[data-team-nav]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -381,23 +381,36 @@ function renderTeams() {
 }
 
 function renderTeamSheet(team, identity, meta) {
+  const players = teamMainPlayers(team);
+  const subs = teamSubs(team);
   return `
-    <article class="teammate-hero team-sheet ${meta.revealed ? 'is-revealed' : ''} ${teamColorClass(team)}">
+    <article class="teammate-hero team-sheet ${teamColorClass(team)}">
       <div class="team-hero-top">
         <div>
-          <div class="teammate-kicker">${meta.isMine ? 'Đội của bạn tuần này' : 'Xem đội khác'}</div>
+          <div class="teammate-kicker">${meta.isMine ? 'Đội của bạn tuần này' : 'Đội khác'}</div>
           <h3>${esc(team.name || `Team ${team.id}`)}</h3>
         </div>
         <span class="team-swatch" aria-hidden="true"></span>
       </div>
-      <p>${meta.isMine ? 'Đây là đội của bạn hôm nay.' : 'Dùng nút chuyển để quay lại đội của bạn.'}</p>
       <div class="team-meta-row">
-        <span class="teammate-count">${teamMainPlayers(team).length} ${t('playerUnit')}</span>
+        <span class="teammate-count">${players.length} ${t('playerUnit')}</span>
         ${teamGkCount(team) ? `<span class="team-gk-count">${teamGkCount(team)} ${t('gkReady')}</span>` : ''}
         <span class="team-page-pill">${meta.page} / ${meta.total}</span>
       </div>
-      ${renderTeamPitch(team, identity, meta.revealed)}
-      ${teamSubs(team).length ? renderSubs(team, identity) : ''}
+      <ul class="team-simple-list">
+        ${players.map((player, i) => {
+          const isMe = isCurrentPlayer(player, identity);
+          return `<li class="team-simple-row ${isMe ? 'is-me' : ''}">
+            <span class="team-simple-num">${String(i + 1).padStart(2, '0')}</span>
+            <span class="team-simple-name">${esc(playerName(player))}</span>
+            <span class="team-simple-badges">
+              ${isMe ? `<span class="you-badge">${t('you')}</span>` : ''}
+              ${isPlayerGk(player) ? `<span class="gk-badge">${t('gk')}</span>` : ''}
+            </span>
+          </li>`;
+        }).join('')}
+      </ul>
+      ${subs.length ? renderSubs(team, identity) : ''}
     </article>
   `;
 }
@@ -746,10 +759,10 @@ function toDate(value) {
 }
 
 function fmtDate(date) {
-  return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
+  return new Intl.DateTimeFormat('vi-VN', {
     weekday: 'long',
     day: '2-digit',
-    month: 'short',
+    month: 'long',
     year: 'numeric',
   }).format(date);
 }
