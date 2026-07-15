@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Admin - Bóng Đá Thứ 7</title>
   <meta name="theme-color" content="#1b4332">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=4">
 </head>
 <body class="app-shell admin-page admin-hub">
   <header class="topbar admin-hub-topbar">
@@ -35,21 +35,19 @@
           <span>Open poll</span>
           <strong>RSVP</strong>
         </button>
-        <button class="admin-action-card" type="button" onclick="lockPoll()">
-          <span>Lock list</span>
-          <strong>Lock</strong>
-        </button>
         <a class="admin-action-card accent" href="/admin/teams.html">
           <span>Split teams</span>
           <strong>Teams</strong>
         </a>
-        <a class="admin-action-card money" href="/admin/monthly.html">
-          <span>Monthly fee</span>
-          <strong>150k</strong>
-        </a>
+
         <a class="admin-action-card" href="/admin/events.html">
           <span>Friendlies</span>
           <strong>Events</strong>
+        </a>
+
+        <a class="admin-action-card" href="/admin/ratings.html">
+          <span>Skill</span>
+          <strong>Ratings</strong>
         </a>
       </div>
 
@@ -72,13 +70,6 @@
       </div>
     </section>
 
-    <section class="admin-danger-strip">
-      <div>
-        <strong>End session</strong>
-        <span>Move to payment collection and debt recording.</span>
-      </div>
-      <button class="btn btn-danger" type="button" onclick="endSessionAndGoPayment()">Collect</button>
-    </section>
 
     <section class="admin-panel admin-roster-panel">
       <div class="admin-panel-title">
@@ -103,43 +94,7 @@
       </details>
     </section>
 
-    <details class="admin-panel admin-bank-panel">
-      <summary>
-        <span>Bank account</span>
-        <small id="bankConfigStatus">Not configured</small>
-      </summary>
-      <div class="bank-config-form">
-        <div>
-          <label class="field-label" for="bankCode">Bank</label>
-          <select id="bankCode" class="input">
-            <option value="">Select bank</option>
-            <option value="MB">MB Bank</option>
-            <option value="VCB">Vietcombank</option>
-            <option value="TCB">Techcombank</option>
-            <option value="ACB">ACB</option>
-            <option value="VPB">VPBank</option>
-            <option value="BIDV">BIDV</option>
-            <option value="ICB">VietinBank</option>
-            <option value="TPB">TPBank</option>
-            <option value="HDB">HDBank</option>
-            <option value="STB">Sacombank</option>
-            <option value="MSB">MSB</option>
-            <option value="VIB">VIB</option>
-            <option value="SHB">SHB</option>
-            <option value="OCB">OCB</option>
-          </select>
-        </div>
-        <div>
-          <label class="field-label" for="accountNumber">Account number</label>
-          <input id="accountNumber" class="input" type="text" placeholder="0123456789" inputmode="numeric">
-        </div>
-        <div>
-          <label class="field-label" for="accountName">Account holder</label>
-          <input id="accountName" class="input" type="text" placeholder="NGUYEN VAN A" style="text-transform:uppercase">
-        </div>
-        <button class="btn primary btn-block" type="button" onclick="saveBankConfig()">Save bank</button>
-      </div>
-    </details>
+
   </main>
 
   <!-- Session date picker overlay -->
@@ -168,7 +123,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/js/admin-auth.js"></script>
+  <script src="/js/session-utils.js?v=1"></script>
+  <script src="/js/admin-auth.js?v=4"></script>
   <script>
     window.addEventListener('DOMContentLoaded', () => requireAuth(initAdmin));
 
@@ -186,30 +142,9 @@
       sendPollNotification(dateStr);
     }
 
-    async function endSessionAndGoPayment() {
-      try {
-        if (!currentSession) {
-          toast('No active session to end.', 'error');
-          return;
-        }
-        await db.collection('sessions').doc(currentSession.id).set({
-          status: 'done',
-          endedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-        await db.collection('config').doc('app').set({
-          currentSessionId: null
-        }, { merge: true });
-        window.location.href = `/admin/payment.html?sessionId=${encodeURIComponent(currentSession.id)}`;
-      } catch (error) {
-        console.error(error);
-        toast('Failed to end session.', 'error');
-      }
-    }
-
     function sendPollNotification(dateStr) {
       if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
-      const label = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      const label = new Date(dateStr + 'T00:00:00').toLocaleDateString('vi-VN', { weekday: 'short', day: 'numeric', month: 'numeric' });
       navigator.serviceWorker.ready.then(reg => {
         reg.active?.postMessage({
           type: 'POLL_OPEN',

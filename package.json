@@ -1,0 +1,11 @@
+{
+  "name": "bdt7-football",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:browser": "playwright test tests/browser-smoke.spec.js --browser=chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

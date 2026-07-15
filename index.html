@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=4">
   <style>
     /* Event screen */
     .event-hero {
@@ -108,7 +108,6 @@
       <h1>Bóng Đá Thứ 7</h1>
     </div>
     <div class="topbar-actions">
-      <button id="langToggle" class="chip-btn" type="button">EN</button>
       <span id="statusBadge" class="status-badge is-open">Open</span>
     </div>
   </header>
@@ -124,28 +123,29 @@
       <p data-i18n="noSessionBody">Admin mở poll để mọi người đăng ký.</p>
     </section>
 
+    <!-- Event banner (shows above poll when a friendly is live) -->
+    <div id="eventBanner" hidden></div>
+
     <!-- Weekly session poll -->
     <section id="pollContent" hidden>
-      <article id="counterCard" class="counter-card">
-        <p id="sessionDate" class="session-date">--</p>
-        <div class="counter-line">
-          <strong id="goingCount">0 / 21 Going</strong>
-          <span id="lockText" data-i18n="spotsOpen">Còn chỗ</span>
-        </div>
-        <div class="progress-track" aria-hidden="true">
-          <div id="progressFill" class="progress-fill"></div>
-        </div>
-      </article>
+      <div class="rsvp-panel">
+        <article id="counterCard" class="counter-card">
+          <p id="sessionDate" class="session-date">--</p>
+          <div class="counter-line">
+            <strong id="goingCount">0 / 21 Going</strong>
+            <span id="lockText" data-i18n="spotsOpen">Còn chỗ</span>
+          </div>
+          <div class="progress-track" aria-hidden="true">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+        </article>
 
-      <a id="seeTeamsBtn" class="primary-link" href="#teamsSection" hidden data-i18n="seeTeams">Xem đội</a>
+        <a id="seeTeamsBtn" class="primary-link" href="#teamsSection" hidden data-i18n="seeTeams">Xem đội</a>
 
-      <div id="slotsNotif" class="slots-notif" hidden></div>
-
-      <section id="myRsvpBlock" class="my-rsvp-card">
-        <p class="section-kicker" data-i18n="yourStatus">RSVP của bạn</p>
-        <h2 id="myRsvpName">--</h2>
-        <button id="myRsvpBtn" class="my-rsvp-btn" type="button">Đăng ký đi đá</button>
-      </section>
+        <section id="myRsvpBlock" class="my-rsvp-card">
+          <button id="myRsvpBtn" class="my-rsvp-btn" type="button">Đăng ký đi đá</button>
+        </section>
+      </div>
 
       <section id="goingListBlock" class="going-section">
         <div class="going-title-row">
@@ -155,12 +155,6 @@
         <ul id="goingListItems" class="going-list"></ul>
       </section>
 
-      <section id="paySection" hidden>
-        <a id="payLink" href="/payment.html" class="pay-section-link">
-          <span>💰 Thanh toán tiền sân</span>
-          <span class="pay-section-badge">35,000đ →</span>
-        </a>
-      </section>
 
       <section id="teamsSection" class="teams-section" hidden>
         <div class="section-head">
@@ -215,7 +209,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/js/rsvp.js?v=6"></script>
+  <script src="/js/session-utils.js?v=1"></script>
+  <script src="/js/rsvp.js?v=12"></script>
   <script>
     (function initEventPoll() {
       let activeEvent = null;

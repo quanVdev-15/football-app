@@ -28,6 +28,8 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage
+test-results/
+playwright-report/
 
 # nyc test coverage
 .nyc_output
@@ -68,3 +70,8 @@ node_modules/
 # dataconnect generated files
 .dataconnect
 .aider*
+
+# Local AI agent tooling (Claude Code skills/settings) — not part of the app
+.agents/
+.claude/
+skills-lock.json

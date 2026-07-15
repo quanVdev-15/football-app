@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Test Team Split</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css?v=4">
+  <style>
+    .test-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .gk-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 28px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1.5px solid var(--line);
+      background: #f8faf9;
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .gk-toggle.active {
+      background: #fff3cd;
+      border-color: #f9a825;
+      color: #8a5a00;
+    }
+    .test-going-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 28px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1.5px solid var(--line);
+      background: #f8faf9;
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .test-going-toggle.active {
+      background: var(--ok-bg);
+      border-color: #9bd5aa;
+      color: #17623b;
+    }
+    .admin-player { transition: opacity .2s; }
+    .admin-player.not-going { opacity: .45; }
+  </style>
+</head>
+<body class="app-shell admin-page">
+
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Test</p>
+    <h1>Team Split</h1>
+  </div>
+  <div class="topbar-actions">
+    <span id="goingCount" class="chip-btn">0 going</span>
+  </div>
+</header>
+
+<main class="page" id="content">
+
+  <section class="admin-panel">
+    <div class="admin-panel-title">
+      <div>
+        <h2>Rate & select players</h2>
+        <p class="subtle">Set stars, toggle GK, check who's going — then split.</p>
+      </div>
+    </div>
+    <div class="test-controls">
+      <button class="btn secondary btn-sm" type="button" onclick="selectAll()">All going</button>
+      <button class="btn secondary btn-sm" type="button" onclick="selectNone()">None going</button>
+      <button class="btn secondary btn-sm" type="button" onclick="selectRandom()">Random 21</button>
+    </div>
+    <div id="playerList" class="admin-player-list compact"></div>
+  </section>
+
+  <div style="position:sticky;bottom:0;padding:12px 0;background:linear-gradient(to top,var(--bg) 70%,transparent)">
+    <button class="btn accent btn-block" style="min-height:56px;font-size:1.05rem" type="button" onclick="doSplit()">Split teams</button>
+  </div>
+
+  <div id="teamsResult" style="display:none">
+    <div id="teamCards" class="teams-admin-grid"></div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PLAYERS = [
+  'Bello', 'Bùi Chí Minh', 'Công Danh', 'Công Minh Lê', 'Dinh Van Duc',
+  'Duy Côngg', 'Duy Nguyễn Trịnh', 'Đặng Xuân Trường', 'Đức Long', 'Đức Thịnh',
+  'Lê Chiến', 'Lê Minh Hiển', 'Long Nghĩa', 'Long Tran', 'Mạnh Đức',
+  'Mỹ Xuồi', 'Ngọc Phúc', 'Nguyen Hoàng Anh', 'Nguyen Hoang Huy', 'Nguyễn Công Thuận',
+  'Nguyễn Hiếu', 'Nguyễn Hiển', 'Nguyễn Hoàng Longg', 'Nguyễn Minh Quân', 'Nhật Quang',
+  'Phạm Xuân Duy', 'Quân Trần', 'Le Doan Anh Quan', 'Tuấn Linh', 'Trần Đức Anh',
+  'Trần Hà', 'Thành Nam', 'Nam Khánhh',
+];
+
+const DEFAULT_POINTS = 3;
+const MAX_POINTS = 5;
+
+// State: { name, points, isGK, going }
+let state = PLAYERS.map(name => ({ name, points: DEFAULT_POINTS, isGK: false, going: true }));
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function render() {
+  const goingN = state.filter(p => p.going).length;
+  document.getElementById('goingCount').textContent = goingN + ' going';
+
+  document.getElementById('playerList').innerHTML = state.map((p, i) => `
+    <article class="admin-player ${p.going ? '' : 'not-going'}">
+      <div>
+        <strong>${esc(p.name)}</strong>
+        <small>${p.going ? 'Going' : 'Not going'}</small>
+      </div>
+      ${p.isGK ? '<span class="gk-badge">GK</span>' : `<div class="star-rating" data-idx="${i}">
+        ${Array.from({length: MAX_POINTS}, (_, s) =>
+          `<button type="button" class="${s < p.points ? 'is-filled' : ''}" data-star="${s+1}" aria-label="${s+1} star">★</button>`
+        ).join('')}
+      </div>`}
+      <button class="gk-toggle ${p.isGK ? 'active' : ''}" type="button" data-gk="${i}">GK</button>
+      <button class="test-going-toggle ${p.going ? 'active' : ''}" type="button" data-going="${i}">${p.going ? 'IN' : 'OUT'}</button>
+    </article>
+  `).join('');
+
+  // Star clicks
+  document.querySelectorAll('[data-idx]').forEach(wrap => {
+    const idx = Number(wrap.dataset.idx);
+    wrap.querySelectorAll('[data-star]').forEach(btn => {
+      btn.addEventListener('click', () => { state[idx].points = Number(btn.dataset.star); render(); });
+    });
+  });
+
+  // GK toggle
+  document.querySelectorAll('[data-gk]').forEach(btn => {
+    btn.addEventListener('click', () => { const i = Number(btn.dataset.gk); state[i].isGK = !state[i].isGK; render(); });
+  });
+
+  // Going toggle
+  document.querySelectorAll('[data-going]').forEach(btn => {
+    btn.addEventListener('click', () => { const i = Number(btn.dataset.going); state[i].going = !state[i].going; render(); });
+  });
+}
+
+function selectAll() { state.forEach(p => p.going = true); render(); }
+function selectNone() { state.forEach(p => p.going = false); render(); }
+function selectRandom() {
+  state.forEach(p => p.going = false);
+  const indices = state.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  indices.slice(0, 21).forEach(i => state[i].going = true);
+  render();
+}
+
+// ── Team split algorithm (same as admin/teams.html) ──
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function teamPoints(team) {
+  return [...team.players, ...team.subs].filter(p => !p.isGK).reduce((sum, p) => sum + (p.points || 0), 0);
+}
+
+function buildTeams(players, numTeams) {
+  const gks   = shuffle(players.filter(p => p.isGoalkeeper));
+  const field = shuffle(players.filter(p => !p.isGoalkeeper));
+
+  const NAMES  = ['Red', 'Blue', 'Yellow'];
+  const COLORS = ['red', 'blue', 'green'];
+  const teams = Array.from({ length: numTeams }, (_, i) => ({
+    name: 'Đội ' + NAMES[i], color: COLORS[i], players: [], subs: []
+  }));
+
+  // 1 GK per team, randomly assigned (GKs have no rating)
+  gks.forEach(gk => {
+    const open = teams.filter(t => !t.players.some(p => p.isGK));
+    const target = open.length ? open[0] : teams[0];
+    const entry = { name: gk.name, isGK: true, points: 0 };
+    if (open.length) target.players.push(entry);
+    else target.subs.push(entry);
+  });
+
+  field.sort((a, b) => (b.points || 0) - (a.points || 0));
+  field.forEach(p => {
+    const entry = { name: p.name, points: p.points || 0 };
+    const open = teams.filter(t => t.players.length < 7);
+    if (open.length) {
+      open.sort((a, b) => teamPoints(a) - teamPoints(b))[0].players.push(entry);
+    } else {
+      teams.sort((a, b) => teamPoints(a) - teamPoints(b))[0].subs.push(entry);
+    }
+  });
+
+  return teams;
+}
+
+function doSplit() {
+  const going = state.filter(p => p.going).map(p => ({
+    name: p.name, isGoalkeeper: p.isGK, points: p.points
+  }));
+
+  if (going.length < 6) {
+    toast('Need at least 6 players going!', 'error');
+    return;
+  }
+
+  const teams = buildTeams(going, 3);
+  document.getElementById('teamsResult').style.display = '';
+  document.getElementById('teamCards').innerHTML = teams.map(team => {
+    const gkP = team.players.filter(p => p.isGK);
+    const fieldP = team.players.filter(p => !p.isGK);
+    const subs = team.subs;
+    return `<article class="teams-admin-card team-color-${team.color}">
+      <div class="teams-admin-head">
+        <span class="team-swatch"></span>
+        <div>
+          <h3>${esc(team.name)}</h3>
+          <p>${team.players.length} players${subs.length ? ' · ' + subs.length + ' subs' : ''} · ${teamPoints(team)} pts</p>
+        </div>
+      </div>
+      <div class="teams-admin-players">
+        ${gkP.map((p, i) => playerRow(p, i, true)).join('')}
+        ${fieldP.map((p, i) => playerRow(p, i + gkP.length, false)).join('')}
+      </div>
+      ${subs.length ? `<details class="teams-subs" open><summary>${subs.length} subs</summary><div>${subs.map((p, i) => playerRow(p, i, !!p.isGK, true)).join('')}</div></details>` : ''}
+    </article>`;
+  }).join('');
+
+  const pts = teams.map(t => teamPoints(t));
+  document.getElementById('teamCards').innerHTML += `
+    <div class="admin-panel" style="text-align:center;padding:16px">
+      <strong>Team totals: ${pts.join(' / ')}</strong><br>
+      <span style="color:var(--muted);font-size:.88rem">Max difference: ${Math.max(...pts) - Math.min(...pts)} pts</span>
+      <div style="margin-top:12px">
+        <button class="btn accent btn-sm" type="button" onclick="doSplit()">Reshuffle</button>
+      </div>
+    </div>`;
+
+  document.getElementById('teamsResult').scrollIntoView({ behavior: 'smooth' });
+}
+
+function playerRow(p, i, isGK, isSub) {
+  return `<div class="teams-player-row ${isGK ? 'is-gk' : ''} ${isSub ? 'is-sub' : ''}">
+    <span>${String(i+1).padStart(2,'0')}</span>
+    <strong>${esc(p.name)}</strong>
+    <em>${isGK ? 'GK' : '★'.repeat(p.points) + '☆'.repeat(5 - p.points)}</em>
+  </div>`;
+}
+
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + (type || '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = 'toast', 2200);
+}
+
+// Init
+render();
+</script>
+</body>
+</html>

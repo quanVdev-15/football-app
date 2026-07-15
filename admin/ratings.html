@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ratings - Admin</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css?v=4">
+</head>
+<body class="app-shell admin-page admin-ratings-page">
+
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>Ratings</h1>
+  </div>
+  <div class="topbar-actions">
+    <a href="/admin/" class="chip-btn">Hub</a>
+  </div>
+</header>
+
+<main class="page" id="adminContent" hidden>
+
+  <section class="admin-panel">
+    <div class="admin-panel-title">
+      <div>
+        <h2>Going today</h2>
+        <p id="goingMeta" class="subtle">--</p>
+      </div>
+    </div>
+    <div id="goingList" class="admin-player-list compact"></div>
+  </section>
+
+  <section class="admin-panel">
+    <div class="admin-panel-title">
+      <div>
+        <h2>Rate in advance</h2>
+        <p class="subtle">Add players who haven't logged in yet, so their rating is ready the first time they join.</p>
+      </div>
+    </div>
+    <div class="admin-roster-tools" style="flex-direction:column;align-items:stretch;gap:8px">
+      <textarea id="pendingBulkInput" class="input" rows="4" placeholder="One name per line, e.g.&#10;Nguyễn Minh Quân&#10;Lê Minh Hiển"></textarea>
+      <div style="display:flex;gap:8px">
+        <button class="btn secondary" type="button" onclick="addPendingBulk()" style="flex:1">Add to pending list</button>
+        <button class="btn accent" type="button" onclick="seedPendingPlayers()">Seed 30 players</button>
+      </div>
+    </div>
+    <div id="pendingList" class="admin-player-list compact" style="margin-top:12px"></div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script src="/js/session-utils.js?v=1"></script>
+<script src="/js/admin-auth.js?v=4"></script>
+<script>
+let ratingsSession = null;
+let ratingsGoing = [];   // { id, name, points, hasRating }
+let ratingsPending = []; // { id, name, points }
+let unsubRatingsPlayers = null;
+let dismissedSuggestions = new Set();
+
+window.addEventListener('DOMContentLoaded', () => requireAuth(initRatings));
+
+async function initRatings() {
+  document.getElementById('adminContent').hidden = false;
+
+  ratingsSession = await getActiveSession();
+
+  if (unsubRatingsPlayers) unsubRatingsPlayers();
+  unsubRatingsPlayers = db.collection('players').onSnapshot(snap => {
+    const all = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    ratingsPending = all.filter(p => p.pending);
+    loadGoing(all.filter(p => !p.pending));
+  });
+}
+
+async function loadGoing(playerDocs) {
+  const playerMap = {};
+  playerDocs.forEach(p => { playerMap[p.id] = p; });
+
+  ratingsGoing = [];
+  if (ratingsSession) {
+    const rsvpSnap = await db.collection('sessions').doc(ratingsSession.id).collection('rsvps').get();
+    rsvpSnap.docs.forEach(d => {
+      const data = d.data();
+      if (!['in', 'going'].includes(data.status || data.vote)) return;
+      const pData = playerMap[d.id] || {};
+      ratingsGoing.push({
+        id: d.id,
+        name: data.playerName,
+        points: pData.points,
+        isGoalkeeper: !!pData.isGoalkeeper,
+        hasRating: pData.points !== undefined
+      });
+    });
+  }
+
+  document.getElementById('goingMeta').textContent = ratingsSession
+    ? `${ratingsGoing.length} player${ratingsGoing.length === 1 ? '' : 's'} going`
+    : 'No active session — open a poll from the Hub first.';
+
+  renderGoing();
+  renderPending();
+}
+
+function renderGoing() {
+  const list = document.getElementById('goingList');
+  if (!ratingsGoing.length) {
+    list.innerHTML = `<div class="state-card">No RSVPs yet.</div>`;
+    return;
+  }
+
+  const sorted = [...ratingsGoing].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'en', { sensitivity: 'base' }));
+
+  list.innerHTML = sorted.map(player => {
+    const value = Number(player.points) || DEFAULT_PLAYER_POINTS;
+    const matches = player.hasRating ? [] : findPendingMatches(player.name);
+    return `
+      <article class="admin-player" style="display:flex;flex-direction:column;align-items:stretch;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <strong>${esc(player.name || '')}</strong>
+            ${player.isGoalkeeper ? '<span class="gk-badge">GK</span>' : ''}
+            ${!player.isGoalkeeper && !player.hasRating ? '<small>New — not yet rated</small>' : ''}
+          </div>
+          ${player.isGoalkeeper ? '' : `<div class="star-rating" data-star-player="${escAttr(player.id)}">
+            ${starButtons(value)}
+          </div>`}
+        </div>
+        ${matches.map(m => `
+          <div class="pay-empty" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span>Pending rating found for "${esc(m.name)}": ${'★'.repeat(Number(m.points) || DEFAULT_PLAYER_POINTS)}</span>
+            <span style="display:flex;gap:6px">
+              <button class="chip-btn" type="button" onclick="applyPendingMatch('${escAttr(player.id)}', '${escAttr(m.id)}')">Apply</button>
+              <button class="chip-btn" type="button" onclick="dismissSuggestion('${escAttr(player.id)}', '${escAttr(m.id)}')">Ignore</button>
+            </span>
+          </div>
+        `).join('')}
+      </article>
+    `;
+  }).join('');
+
+  list.querySelectorAll('[data-star-player]').forEach(wrap => {
+    wrap.querySelectorAll('[data-star-value]').forEach(btn => {
+      btn.addEventListener('click', () => setPlayerPoints(wrap.dataset.starPlayer, Number(btn.dataset.starValue)));
+    });
+  });
+}
+
+function findPendingMatches(name) {
+  const target = normalizeName(name);
+  if (!target) return [];
+  return ratingsPending.filter(p => normalizeName(p.name) === target && !dismissedSuggestions.has(p.id));
+}
+
+function dismissSuggestion(playerId, pendingId) {
+  dismissedSuggestions.add(pendingId);
+  renderGoing();
+}
+
+async function applyPendingMatch(playerId, pendingId) {
+  const pending = ratingsPending.find(p => p.id === pendingId);
+  if (!pending) return;
+  await db.collection('players').doc(playerId).set({ points: Number(pending.points) || DEFAULT_PLAYER_POINTS }, { merge: true });
+  await db.collection('players').doc(pendingId).delete();
+  toast('Rating applied.', 'success');
+}
+
+function renderPending() {
+  const list = document.getElementById('pendingList');
+  if (!ratingsPending.length) {
+    list.innerHTML = `<div class="pay-empty">No pending players yet.</div>`;
+    return;
+  }
+
+  const sorted = [...ratingsPending].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'en', { sensitivity: 'base' }));
+
+  list.innerHTML = sorted.map(player => `
+    <article class="admin-player">
+      <div>
+        <strong>${esc(player.name || '')}</strong>
+        <small>Not logged in yet</small>
+      </div>
+      <div class="star-rating" data-star-pending="${escAttr(player.id)}">
+        ${starButtons(Number(player.points) || DEFAULT_PLAYER_POINTS)}
+      </div>
+      <button class="chip-btn danger" type="button" onclick="removePending('${escAttr(player.id)}')">Remove</button>
+    </article>
+  `).join('');
+
+  list.querySelectorAll('[data-star-pending]').forEach(wrap => {
+    wrap.querySelectorAll('[data-star-value]').forEach(btn => {
+      btn.addEventListener('click', () => setPlayerPoints(wrap.dataset.starPending, Number(btn.dataset.starValue)));
+    });
+  });
+}
+
+async function addPendingBulk() {
+  const textarea = document.getElementById('pendingBulkInput');
+  const names = textarea.value.split('\n').map(n => n.trim()).filter(Boolean);
+  if (!names.length) return;
+
+  const existing = new Set(ratingsPending.map(p => normalizeName(p.name)));
+  const seenThisBatch = new Set();
+  let added = 0;
+
+  for (const name of names) {
+    const key = normalizeName(name);
+    if (!key || existing.has(key) || seenThisBatch.has(key)) continue;
+    seenThisBatch.add(key);
+    const id = 'pending_' + key.replace(/\s+/g, '_') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await db.collection('players').doc(id).set({
+      name,
+      points: DEFAULT_PLAYER_POINTS,
+      pending: true,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    added++;
+  }
+
+  textarea.value = '';
+  toast(added ? `Added ${added} pending player${added === 1 ? '' : 's'}.` : 'No new names to add.', added ? 'success' : '');
+}
+
+async function removePending(id) {
+  await db.collection('players').doc(id).delete();
+}
+
+const SEED_NAMES = [
+  'Bello',
+  'Bùi Chí Minh',
+  'Công Danh',
+  'Công Minh Lê',
+  'Dinh Van Duc',
+  'Duy Côngg',
+  'Duy Nguyễn Trịnh',
+  'Đặng Xuân Trường',
+  'Đức Long',
+  'Đức Thịnh',
+  'Lê Chiến',
+  'Lê Minh Hiển',
+  'Long Nghĩa',
+  'Long Tran',
+  'Mạnh Đức',
+  'Mỹ Xuồi',
+  'Ngọc Phúc',
+  'Nguyen Hoàng Anh',
+  'Nguyen Hoang Huy',
+  'Nguyễn Công Thuận',
+  'Nguyễn Hiếu',
+  'Nguyễn Hiển',
+  'Nguyễn Hoàng Longg',
+  'Nguyễn Minh Quân',
+  'Nhật Quang',
+  'Phạm Xuân Duy',
+  'Quân Trần',
+  'Le Doan Anh Quan',
+  'Tuấn Linh',
+  'Trần Đức Anh',
+  'Trần Hà',
+  'Thành Nam',
+  'Nam Khánhh',
+];
+
+async function seedPendingPlayers() {
+  const existing = new Set(ratingsPending.map(p => normalizeName(p.name)));
+  let added = 0;
+
+  for (const name of SEED_NAMES) {
+    const key = normalizeName(name);
+    if (!key || existing.has(key)) continue;
+    const id = 'pending_' + key.replace(/\s+/g, '_') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await db.collection('players').doc(id).set({
+      name,
+      points: DEFAULT_PLAYER_POINTS,
+      pending: true,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    added++;
+  }
+
+  toast(added ? `Seeded ${added} player${added === 1 ? '' : 's'}.` : 'All 30 players already added.', added ? 'success' : '');
+}
+</script>
+</body>
+</html>

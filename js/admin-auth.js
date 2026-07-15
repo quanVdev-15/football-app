@@ -1,6 +1,9 @@
 const ADMIN_AUTH_KEY = 'bdt7_admin_authed';
 const PIN_BUFFER_MAX = 4;
 const ADMIN_DEFAULT_CAP = 21;
+const DEFAULT_PLAYER_POINTS = 3;
+const MIN_PLAYER_POINTS = 1;
+const MAX_PLAYER_POINTS = 5;
 
 let pinBuffer = '';
 let currentSession = null;
@@ -20,8 +23,6 @@ const adminText = {
   vi: {
     sessionControls: 'Điều khiển buổi đá',
     openPoll: 'Open Poll',
-    lockPoll: 'Lock Poll',
-    randomizeTeams: 'Randomize Teams',
     maxCap: 'Giới hạn người chơi',
     save: 'Lưu',
     playerList: 'Danh sách cầu thủ',
@@ -32,8 +33,6 @@ const adminText = {
     saved: 'Đã lưu',
     opened: 'Poll đã mở',
     locked: 'Poll đã khóa',
-    randomized: 'Đã chia đội',
-    needPlayers: 'Cần người đăng ký trước khi chia đội.',
     pinTitle: 'Admin PIN',
     pinBody: 'Nhập mã PIN 4 số để vào trang quản lý.',
     pinSetup: 'Lần đầu sử dụng: nhập PIN 4 số mới.',
@@ -42,8 +41,6 @@ const adminText = {
   en: {
     sessionControls: 'Session controls',
     openPoll: 'Open Poll',
-    lockPoll: 'Lock Poll',
-    randomizeTeams: 'Randomize Teams',
     maxCap: 'Max cap',
     save: 'Save',
     playerList: 'Player list',
@@ -54,8 +51,6 @@ const adminText = {
     saved: 'Saved',
     opened: 'Poll opened',
     locked: 'Poll locked',
-    randomized: 'Teams randomized',
-    needPlayers: 'Players must vote before teams can be made.',
     pinTitle: 'Admin PIN',
     pinBody: 'Enter the 4-digit PIN to manage the session.',
     pinSetup: 'First use: enter a new 4-digit PIN.',
@@ -172,12 +167,19 @@ async function getActiveSession() {
   return getAdminActiveSession();
 }
 
+// Single source of truth for "is there a usable session right now" — every
+// admin page (Hub, teams, ratings, payment) reads through this one function
+// instead of each deciding staleness for itself. See js/session-utils.js for
+// what "usable"/"expired" means.
 async function getAdminActiveSession() {
   const config = await db.collection('config').doc('app').get();
   const currentSessionId = config.exists ? config.data().currentSessionId : null;
   if (currentSessionId) {
     const doc = await db.collection('sessions').doc(currentSessionId).get();
-    if (doc.exists) return { id: doc.id, ...doc.data() };
+    if (doc.exists) {
+      const session = { id: doc.id, ...doc.data() };
+      if (canReuseSession(session)) return session;
+    }
   }
   return null;
 }
@@ -205,7 +207,7 @@ function subscribeAdminRsvps(sessionId) {
 function subscribeAdminPlayers() {
   if (adminUnsubPlayers) adminUnsubPlayers();
   adminUnsubPlayers = db.collection('players').orderBy('name').onSnapshot(snap => {
-    adminPlayers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    adminPlayers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(player => !player.pending);
     renderAdmin();
   });
 }
@@ -224,6 +226,9 @@ function renderAdminSession() {
   const goingCount = goingAdminPlayers().length;
 
   if (!currentSession) {
+    // getAdminActiveSession() already filters out stale/finished sessions, so
+    // this is just "no session at all" — don't show an old date as if it
+    // were still this week's session.
     statusLine.textContent = at('noSession');
     dateEl.textContent = '--';
     statusBadge.textContent = 'Open';
@@ -289,6 +294,9 @@ function renderAdminPlayers() {
           <strong>${esc(player.name || '')}</strong>
           <small>${isGoing ? 'Going' : 'Not going'}</small>
         </div>
+        ${player.isGoalkeeper ? '' : `<div class="star-rating" data-star-player="${escAttr(player.id)}">
+          ${starButtons(Number(player.points) || DEFAULT_PLAYER_POINTS)}
+        </div>`}
         <label class="switch">
           <input type="checkbox" data-gk-player="${escAttr(player.id)}" ${player.isGoalkeeper ? 'checked' : ''}>
           ${at('gk')}
@@ -300,6 +308,19 @@ function renderAdminPlayers() {
   list.querySelectorAll('[data-gk-player]').forEach(input => {
     input.addEventListener('change', () => toggleGoalkeeper(input.dataset.gkPlayer, input.checked));
   });
+  list.querySelectorAll('[data-star-player]').forEach(wrap => {
+    wrap.querySelectorAll('[data-star-value]').forEach(btn => {
+      btn.addEventListener('click', () => setPlayerPoints(wrap.dataset.starPlayer, Number(btn.dataset.starValue)));
+    });
+  });
+}
+
+function starButtons(value) {
+  let html = '';
+  for (let i = 1; i <= MAX_PLAYER_POINTS; i++) {
+    html += `<button type="button" class="${i <= value ? 'is-filled' : ''}" data-star-value="${i}" aria-label="Rate ${i} star${i > 1 ? 's' : ''}">★</button>`;
+  }
+  return html;
 }
 
 function renderGoingPreview(goingIds) {
@@ -353,7 +374,9 @@ function syncRosterTabs() {
 
 function openPoll() {
   if (!currentSession) {
-    // Show date picker overlay for new session
+    // getAdminActiveSession() already filters out stale/finished sessions, so
+    // this means there's genuinely nothing to reopen — show the date picker
+    // to start fresh instead.
     const d = new Date();
     const daysToSat = (6 - d.getDay() + 7) % 7 || 7;
     d.setDate(d.getDate() + daysToSat);
@@ -365,7 +388,7 @@ function openPoll() {
     }
     return;
   }
-  // Re-open existing session
+  // Re-open existing (still-upcoming) session
   const cap = Number(document.getElementById('capInput').value || ADMIN_DEFAULT_CAP);
   db.collection('sessions').doc(currentSession.id).set({
     status: 'rsvp',
@@ -399,15 +422,6 @@ async function openPollWithDate(dateStr, time, location) {
   }
 }
 
-async function lockPoll() {
-  if (!currentSession) return openPoll();
-  await db.collection('sessions').doc(currentSession.id).update({
-    status: 'locked',
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-  });
-  toast(at('locked'), 'success');
-}
-
 async function saveCap() {
   if (!currentSession) return openPoll();
   const cap = Number(document.getElementById('capInput').value || ADMIN_DEFAULT_CAP);
@@ -415,57 +429,18 @@ async function saveCap() {
   toast(at('saved'), 'success');
 }
 
-async function randomizeTeams() {
-  if (!currentSession) return openPoll();
-  const going = goingAdminPlayers().map(rsvp => {
-    const player = adminPlayers.find(item => item.id === (rsvp.playerId || rsvp.id));
-    return {
-      id: rsvp.playerId || rsvp.id,
-      name: rsvp.playerName || player?.name || '',
-      isGoalkeeper: !!(player?.isGoalkeeper || rsvp.isGoalkeeper),
-    };
-  }).filter(player => player.id && player.name);
-
-  if (!going.length) {
-    toast(at('needPlayers'), 'error');
-    return;
-  }
-
-  const groups = [
-    { id: 'A', name: 'Team A', players: [] },
-    { id: 'B', name: 'Team B', players: [] },
-    { id: 'C', name: 'Team C', players: [] },
-  ];
-
-  const shuffledGks = shuffle(going.filter(player => player.isGoalkeeper));
-  const shuffledField = shuffle(going.filter(player => !player.isGoalkeeper));
-  shuffledGks.forEach((player, index) => groups[index % groups.length].players.push(player));
-  shuffledField.forEach(player => {
-    groups.sort((a, b) => a.players.length - b.players.length);
-    groups[0].players.push(player);
-  });
-  groups.sort((a, b) => a.id.localeCompare(b.id));
-
-  const batch = db.batch();
-  const sessionRef = db.collection('sessions').doc(currentSession.id);
-  groups.forEach(team => {
-    batch.set(sessionRef.collection('teams').doc(team.id), {
-      name: team.name,
-      players: team.players,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-  });
-  batch.set(sessionRef, {
-    status: 'teams',
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-  await batch.commit();
-  toast(at('randomized'), 'success');
-}
-
 async function toggleGoalkeeper(playerId, checked) {
   await db.collection('players').doc(playerId).set({ isGoalkeeper: checked }, { merge: true });
   toast(at('saved'), 'success');
+}
+
+async function setPlayerPoints(playerId, value) {
+  const next = Math.max(MIN_PLAYER_POINTS, Math.min(MAX_PLAYER_POINTS, Number(value) || DEFAULT_PLAYER_POINTS));
+  await db.collection('players').doc(playerId).set({ points: next }, { merge: true });
+}
+
+function normalizeName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 function goingAdminPlayers() {
@@ -493,7 +468,6 @@ function applyAdminI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = at(el.dataset.i18n);
   });
-  document.getElementById('adminLangToggle').textContent = adminLang === 'vi' ? 'EN' : 'VI';
 }
 
 function at(key) {
@@ -515,19 +489,12 @@ function isoDate(date) {
   return `${y}-${m}-${d}`;
 }
 
-function toDate(value) {
-  if (!value) return null;
-  if (value.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
-}
-
 function formatAdminDate(date) {
   if (!date) return '--';
-  return new Intl.DateTimeFormat(adminLang === 'vi' ? 'vi-VN' : 'en-US', {
+  return new Intl.DateTimeFormat('vi-VN', {
     weekday: 'long',
     day: '2-digit',
-    month: 'short',
+    month: 'long',
     year: 'numeric',
   }).format(date);
 }
@@ -569,15 +536,6 @@ async function saveBankConfig() {
   const statusEl = document.getElementById('bankConfigStatus');
   if (statusEl) statusEl.textContent = `✅ Đã lưu: ${bankCode} — ${accountNum}`;
   toast('Đã lưu tài khoản ngân hàng!', 'success');
-}
-
-function shuffle(items) {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
 }
 
 function toast(message, type = '') {

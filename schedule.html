@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Schedule</title>
   <meta name="theme-color" content="#1b4332">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=4">
   <style>
     .sched-list { display: flex; flex-direction: column; gap: 12px; }
 
@@ -133,8 +133,8 @@
 
       list.innerHTML = all.map(ev => {
         const d = toDate(ev.date);
-        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-        const month   = d.toLocaleDateString('en-US', { month: 'short' });
+        const dayName = d.toLocaleDateString('vi-VN', { weekday: 'short' });
+        const month   = d.toLocaleDateString('vi-VN', { month: 'numeric' });
 
         if (ev._type === 'session') {
           const statusLabel = { rsvp: 'Poll open', locked: 'Locked', teams: 'Teams ready' }[ev.status] || ev.status;

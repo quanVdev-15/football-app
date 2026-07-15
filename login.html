@@ -1,17 +1,50 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Bóng Đá Thứ 7</title>
   <meta name="theme-color" content="#1b4332">
   <link rel="manifest" href="/manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=4">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Boot splash ──────────────────────────────────────────── */
+    .boot-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 42px;
+      background: radial-gradient(120% 85% at 50% 34%, #241914, #17110d);
+      font-family: 'Be Vietnam Pro', system-ui, sans-serif;
+      transition: opacity 0.4s ease;
+    }
+
+    .boot-splash.boot-hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .boot-mark { width: 164px; height: 164px; animation: bootTileIn 0.5s cubic-bezier(.2,.7,.2,1) both; }
+    .boot-track { opacity: 0; animation: bootFadeIn 0.4s ease 0.4s both; }
+    .boot-draw  { stroke-dasharray: 1; animation: bootDraw 1.05s cubic-bezier(.5,.05,.2,1) 0.55s both; }
+    .boot-caption { text-align: center; animation: bootRiseUp 0.6s ease 1.55s both; }
+    .boot-caption .boot-by  { font-size: 14px; color: rgba(255,255,255,.8); }
+    .boot-caption .boot-brand { font-size: 20px; font-weight: 700; letter-spacing: .14em; color: #fff; margin-top: 3px; }
+
+    @keyframes bootTileIn { from { opacity:0; transform: scale(.6); } to { opacity:1; transform: scale(1); } }
+    @keyframes bootFadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes bootDraw   { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+    @keyframes bootRiseUp { from { opacity:0; transform: translateY(18px); } to { opacity:1; transform: none; } }
 
     body {
       min-height: 100vh;
@@ -35,15 +68,6 @@
       padding: 40px 24px 260px;
       text-align: center;
       pointer-events: none;
-    }
-
-    .welcome-ball {
-      font-size: 4.5rem;
-      line-height: 1;
-      margin-bottom: 20px;
-      opacity: 0;
-      transform: scale(0.4) rotate(-20deg);
-      animation: ballDrop 0.7s cubic-bezier(.34,1.56,.64,1) 0.2s forwards;
     }
 
     .welcome-title {
@@ -182,10 +206,6 @@
     }
 
     /* ── Animations ───────────────────────────────────────────── */
-    @keyframes ballDrop {
-      to { opacity: 1; transform: scale(1) rotate(0deg); }
-    }
-
     @keyframes fadeUp {
       to { opacity: 1; transform: translateY(0); }
     }
@@ -201,9 +221,21 @@
 </head>
 <body>
 
+  <!-- Boot splash: plays once, then fades to reveal the login screen -->
+  <div class="boot-splash" id="bootSplash">
+    <svg class="boot-mark" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="22" fill="#2C1A0E"></rect>
+      <path class="boot-track" d="M 14 44 L 14 58 Q 14 74 28 74 Q 42 74 42 58 L 42 42 Q 42 24 56 24 Q 70 24 70 42 L 70 58 Q 70 72 82 72 L 88 72" stroke="rgba(255,255,255,0.11)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path class="boot-draw" pathLength="1" d="M 14 44 L 14 58 Q 14 74 28 74 Q 42 74 42 58 L 42 42 Q 42 24 56 24 Q 70 24 70 42 L 70 58 Q 70 72 82 72 L 88 72" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+    <div class="boot-caption">
+      <div class="boot-by">Một sản phẩm được phát triển bởi</div>
+      <div class="boot-brand">VNBOT</div>
+    </div>
+  </div>
+
   <!-- Welcome hero -->
   <div class="welcome">
-    <div class="welcome-ball">⚽</div>
     <h1 class="welcome-title">Bóng Đá<br>Thứ 7</h1>
     <p class="welcome-sub">Đăng ký để tham gia buổi đá</p>
   </div>
@@ -212,41 +244,91 @@
   <div class="login-sheet">
     <div class="sheet-handle"></div>
     <p class="sheet-title">Chào mừng!</p>
-    <p class="sheet-sub">Nhập tên và số điện thoại để bắt đầu.</p>
+    <p class="sheet-sub" id="sheetSub">Chọn tên của bạn trong danh sách.</p>
 
-    <div class="field">
-      <label for="nameInput">Tên của bạn</label>
-      <input
-        id="nameInput"
-        type="text"
-        placeholder="VD: Nguyễn Văn A"
-        autocomplete="name"
-        maxlength="40"
-      >
-      <p class="field-error" id="nameError">Nhập tên của bạn.</p>
+    <!-- Step 1: pick your name from the roster -->
+    <div id="pickerStep">
+      <div class="field">
+        <input
+          id="nameSearchInput"
+          class="input"
+          type="search"
+          placeholder="Tìm tên của bạn..."
+          oninput="filterNamePicker(this.value)"
+        >
+      </div>
+      <div id="namePickerList" class="vote-list" style="margin-bottom:16px;max-height:340px;overflow-y:auto"></div>
+      <button class="btn-join" id="notListedBtn" type="button" onclick="showManualForm()" style="background:#f3f4f6;color:#111">
+        Tên tôi không có trong danh sách
+      </button>
     </div>
 
-    <div class="field">
-      <label for="phoneInput">Số điện thoại</label>
-      <input
-        id="phoneInput"
-        type="tel"
-        placeholder="0912 345 678"
-        autocomplete="tel"
-        maxlength="11"
-        inputmode="numeric"
-      >
-      <p class="field-error" id="phoneError">Số điện thoại chưa đúng (VD: 0912345678).</p>
+    <!-- Step 2: claim a pending (pre-rated, not-yet-logged-in) name -->
+    <div id="claimStep" hidden>
+      <p class="sheet-sub">Xác nhận số điện thoại cho <strong id="claimName">--</strong></p>
+      <div class="field">
+        <label for="claimPhoneInput">Số điện thoại</label>
+        <input
+          id="claimPhoneInput"
+          type="tel"
+          placeholder="0912 345 678"
+          autocomplete="tel"
+          maxlength="11"
+          inputmode="numeric"
+        >
+        <p class="field-error" id="claimPhoneError">Số điện thoại chưa đúng (VD: 0912345678).</p>
+      </div>
+      <label style="display:flex;align-items:center;gap:12px;margin-bottom:20px;cursor:pointer;user-select:none">
+        <input type="checkbox" id="claimGkCheck" style="width:20px;height:20px;accent-color:#1b4332;cursor:pointer;flex-shrink:0">
+        <span style="font-size:0.95rem;font-weight:600;color:#374151">🧤 Tôi là thủ môn</span>
+      </label>
+      <button class="btn-join" id="claimBtn" type="button" onclick="confirmClaim()">Vào sân ⚽</button>
+      <button class="btn-join" type="button" onclick="backToPicker()" style="background:#f3f4f6;color:#111;margin-top:8px">
+        ‹ Quay lại
+      </button>
     </div>
 
-    <label style="display:flex;align-items:center;gap:12px;margin-bottom:20px;cursor:pointer;user-select:none">
-      <input type="checkbox" id="gkCheck" style="width:20px;height:20px;accent-color:#1b4332;cursor:pointer;flex-shrink:0">
-      <span style="font-size:0.95rem;font-weight:600;color:#374151">🧤 Tôi là thủ môn</span>
-    </label>
+    <!-- Step 3 (fallback): manual name + phone entry for brand-new players -->
+    <div id="manualStep" hidden>
+      <div class="field">
+        <label for="nameInput">Tên của bạn</label>
+        <input
+          id="nameInput"
+          type="text"
+          placeholder="VD: Nguyễn Văn A"
+          autocomplete="name"
+          maxlength="40"
+        >
+        <p class="field-error" id="nameError">Nhập tên của bạn.</p>
+      </div>
 
-    <button class="btn-join" id="joinBtn" onclick="handleJoin()">
-      Vào sân ⚽
-    </button>
+      <div class="field">
+        <label for="phoneInput">Số điện thoại</label>
+        <input
+          id="phoneInput"
+          type="tel"
+          placeholder="0912 345 678"
+          autocomplete="tel"
+          maxlength="11"
+          inputmode="numeric"
+        >
+        <p class="field-error" id="phoneError">Số điện thoại chưa đúng (VD: 0912345678).</p>
+      </div>
+
+      <label style="display:flex;align-items:center;gap:12px;margin-bottom:20px;cursor:pointer;user-select:none">
+        <input type="checkbox" id="gkCheck" style="width:20px;height:20px;accent-color:#1b4332;cursor:pointer;flex-shrink:0">
+        <span style="font-size:0.95rem;font-weight:600;color:#374151">🧤 Tôi là thủ môn</span>
+      </label>
+
+      <button class="btn-join" id="joinBtn" onclick="handleJoin()">
+        Vào sân ⚽
+      </button>
+      <button class="btn-join" type="button" onclick="backToPicker()" style="background:#f3f4f6;color:#111;margin-top:8px">
+        ‹ Quay lại danh sách
+      </button>
+    </div>
+
+    <p style="text-align:center;margin-top:20px;font-size:0.75rem;color:#9ca3af">Phát triển bởi <strong style="color:#6b7280">vnbot.vn</strong></p>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -254,6 +336,16 @@
   <script src="/js/firebase-config.js"></script>
   <script>
     const IDENTITY_KEY = 'bdt7_player';
+    let rosterEntries = [];   // { id, name, phone, isGoalkeeper, pending, points }
+    let pendingClaim = null;  // the pending entry currently being claimed
+
+    // Boot splash plays once (~2.15s of animation), holds briefly, then fades
+    // out to reveal the login screen (already settled behind it by then).
+    setTimeout(() => {
+      const splash = document.getElementById('bootSplash');
+      splash.classList.add('boot-hide');
+      splash.addEventListener('transitionend', () => splash.remove(), { once: true });
+    }, 2700);
 
     // Already logged in → skip to poll
     (function checkExisting() {
@@ -265,6 +357,161 @@
         }
       } catch (_) {}
     })();
+
+    window.addEventListener('DOMContentLoaded', loadRoster);
+
+    async function loadRoster() {
+      try {
+        const snap = await db.collection('players').get();
+        const all = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Claimed profiles without a phone number are broken/orphaned data (e.g. old
+        // seed/test docs) — they can never pass the login identity check, so hide them.
+        const usable = all.filter(p => p.pending || (p.phone && String(p.phone).trim()));
+        const claimedNames = new Set(usable.filter(p => !p.pending).map(p => normalizeName(p.name)));
+        rosterEntries = usable
+          .filter(p => !p.pending || !claimedNames.has(normalizeName(p.name)))
+          .filter(p => p.name && p.name.trim())
+          .sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi', { sensitivity: 'base' }));
+        renderNamePicker('');
+      } catch (e) {
+        console.warn('Roster load failed, falling back to manual form:', e.message);
+        showManualForm();
+      }
+    }
+
+    function normalizeName(value) {
+      return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
+      }[char]));
+    }
+
+    function escAttr(value) {
+      return esc(value).replace(/`/g, '&#096;');
+    }
+
+    function filterNamePicker(query) {
+      renderNamePicker(query);
+    }
+
+    function renderNamePicker(query) {
+      const list = document.getElementById('namePickerList');
+      const search = normalizeName(query);
+      const visible = search
+        ? rosterEntries.filter(p => normalizeName(p.name).includes(search))
+        : rosterEntries;
+
+      if (!rosterEntries.length) {
+        list.innerHTML = `<p style="text-align:center;color:#9ca3af;font-size:.85rem;padding:12px 0">Chưa có danh sách — nhập tên thủ công bên dưới.</p>`;
+        return;
+      }
+
+      if (!visible.length) {
+        list.innerHTML = `<p style="text-align:center;color:#9ca3af;font-size:.85rem;padding:12px 0">Không tìm thấy tên phù hợp.</p>`;
+        return;
+      }
+
+      list.innerHTML = visible.map(p => `
+        <button class="vote-card" type="button" data-entry-id="${escAttr(p.id)}">
+          <span class="name-row">${esc(p.name)}${p.isGoalkeeper ? '<span class="gk-badge">GK</span>' : ''}</span>
+          <span class="vote-state">${p.pending ? 'Chưa vào lần nào' : ''}</span>
+        </button>
+      `).join('');
+
+      list.querySelectorAll('[data-entry-id]').forEach(btn => {
+        btn.addEventListener('click', () => selectEntry(btn.dataset.entryId));
+      });
+    }
+
+    function selectEntry(id) {
+      const entry = rosterEntries.find(p => p.id === id);
+      if (!entry) return;
+
+      if (!entry.pending) {
+        // Already-claimed profile — log straight in, no extra typing needed.
+        const identity = {
+          name: entry.name,
+          phone: entry.phone || '',
+          playerId: entry.id,
+          isGoalkeeper: !!entry.isGoalkeeper,
+        };
+        localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+        window.location.replace('/index.html');
+        return;
+      }
+
+      // Pending (pre-rated, never logged in) — just need a phone number to finish.
+      pendingClaim = entry;
+      document.getElementById('claimName').textContent = entry.name;
+      document.getElementById('claimPhoneInput').value = '';
+      document.getElementById('claimGkCheck').checked = false;
+      document.getElementById('claimPhoneInput').classList.remove('error');
+      document.getElementById('claimPhoneError').classList.remove('show');
+      setStep('claimStep');
+    }
+
+    function setStep(stepId) {
+      ['pickerStep', 'claimStep', 'manualStep'].forEach(id => {
+        document.getElementById(id).hidden = id !== stepId;
+      });
+      const subText = {
+        pickerStep: 'Chọn tên của bạn trong danh sách.',
+        claimStep: 'Gần xong rồi!',
+        manualStep: 'Nhập tên và số điện thoại để bắt đầu.',
+      };
+      document.getElementById('sheetSub').textContent = subText[stepId] || '';
+    }
+
+    function showManualForm() {
+      setStep('manualStep');
+    }
+
+    function backToPicker() {
+      pendingClaim = null;
+      setStep('pickerStep');
+    }
+
+    async function confirmClaim() {
+      if (!pendingClaim) { backToPicker(); return; }
+      const phone = cleanPhone(document.getElementById('claimPhoneInput').value);
+
+      document.getElementById('claimPhoneInput').classList.remove('error');
+      document.getElementById('claimPhoneError').classList.remove('show');
+
+      if (!isValidPhone(phone)) {
+        document.getElementById('claimPhoneInput').classList.add('error');
+        document.getElementById('claimPhoneError').classList.add('show');
+        return;
+      }
+
+      const btn = document.getElementById('claimBtn');
+      btn.disabled = true;
+      btn.textContent = 'Đang lưu';
+      btn.classList.add('loading');
+
+      const playerId = 'ph_' + phone;
+      const isGoalkeeper = document.getElementById('claimGkCheck').checked;
+      const name = pendingClaim.name;
+
+      try {
+        await db.collection('players').doc(playerId).set({
+          name,
+          phone,
+          isGoalkeeper,
+          points: pendingClaim.points,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        await db.collection('players').doc(pendingClaim.id).delete();
+      } catch (e) {
+        console.warn('Firestore save skipped:', e.message);
+      }
+
+      localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name, phone, playerId, isGoalkeeper }));
+      window.location.replace('/index.html');
+    }
 
     // Phone: strip spaces/dashes, validate Vietnamese format
     function cleanPhone(raw) {
@@ -324,9 +571,11 @@
       window.location.replace('/index.html');
     }
 
-    // Allow Enter key to submit
+    // Allow Enter key to submit whichever step is active
     document.addEventListener('keydown', e => {
-      if (e.key === 'Enter') handleJoin();
+      if (e.key !== 'Enter') return;
+      if (!document.getElementById('claimStep').hidden) confirmClaim();
+      else if (!document.getElementById('manualStep').hidden) handleJoin();
     });
   </script>
 </body>
