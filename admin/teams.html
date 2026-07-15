@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Phân Đội — Admin</title>
   <meta name="theme-color" content="#1b4332">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=4">
 </head>
 <body class="app-shell admin-page admin-teams-page">
 
@@ -71,7 +71,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 <script src="/js/firebase-config.js"></script>
 <script src="/js/utils.js"></script>
-<script src="/js/admin-auth.js"></script>
+<script src="/js/session-utils.js?v=1"></script>
+<script src="/js/admin-auth.js?v=4"></script>
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
 let session = null;
@@ -82,6 +83,17 @@ const TEAM_NAME_ARR  = { 3: ['Red', 'Blue', 'Yellow'],         4: ['Red', 'Blue'
 const TEAM_COLOR_ARR = { 3: ['red', 'blue', 'green'],           4: ['red', 'blue', 'green', 'yellow'] };
 const COLOR_HEX      = { red: '#e53935', blue: '#1565c0', green: '#2e7d32', yellow: '#f9a825', purple: '#7b1fa2' };
 const PLAYER_PREVIEW_LIMIT = 12;
+const DEFAULT_POINTS = 3;
+const DEFAULT_CAP = 21;
+
+// How many players (GK + field) each team should hold, derived from the
+// session's actual rsvpCap instead of a fixed number — so a 24-cap session
+// really does split into 8-per-team like the Hub's own "players per team"
+// hint promises, instead of silently benching the extra players as subs.
+function getTeamCapacity(numTeams) {
+  const cap = Number(session?.rsvpCap) || DEFAULT_CAP;
+  return Math.max(1, Math.floor(cap / numTeams));
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => requireAuth(init));
@@ -111,11 +123,8 @@ async function init() {
     rsvps.push({
       id: d.id,
       name: data.playerName,
-      isGoalkeeper: pData.isGoalkeeper || false
-    });
-    (data.guests || []).forEach((g, i) => {
-      if (g.name && g.name.trim())
-        rsvps.push({ id: d.id + '_g' + i, name: g.name.trim() + ' (guest)', isGoalkeeper: false });
+      isGoalkeeper: pData.isGoalkeeper || false,
+      points: Number(pData.points) || DEFAULT_POINTS
     });
   });
 
@@ -168,7 +177,7 @@ function getNumTeams() {
 
 function doRemix() {
   const numTeams = getNumTeams();
-  const teams = buildTeams([...rsvps], numTeams);
+  const teams = buildTeams([...rsvps], numTeams, getTeamCapacity(numTeams));
   _pendingTeams = teams;
 
   // GK warning
@@ -201,7 +210,13 @@ function shuffle(arr) {
   return arr;
 }
 
-function buildTeams(players, numTeams) {
+// Sum of field-player points on a team (GKs excluded from balance calculation).
+function teamPoints(team) {
+  return [...team.players, ...team.subs].filter(p => !p.isGK).reduce((sum, p) => sum + (p.points || 0), 0);
+}
+
+function buildTeams(players, numTeams, teamCapacity) {
+  // Randomize first so players with equal points still land on random teams.
   const gks   = shuffle(players.filter(p => p.isGoalkeeper));
   const field = shuffle(players.filter(p => !p.isGoalkeeper));
 
@@ -212,26 +227,27 @@ function buildTeams(players, numTeams) {
     subs: []
   }));
 
-  // Hard constraint: 1 GK per team
-  gks.forEach((gk, i) => {
-    if (i < numTeams) teams[i].players.push({ id: gk.id, name: gk.name, isGK: true });
-    else              teams[i % numTeams].subs.push({ id: gk.id, name: gk.name, isGK: true });
+  // Hard constraint: 1 GK per team, randomly assigned (GKs have no rating).
+  gks.forEach(gk => {
+    const openTeams = teams.filter(t => !t.players.some(p => p.isGK));
+    const target = openTeams.length ? openTeams[0] : teams[0];
+    const entry = { id: gk.id, name: gk.name, isGK: true, points: 0 };
+    if (openTeams.length) target.players.push(entry);
+    else target.subs.push(entry);
   });
 
-  // Fill each team to 7 with field players
-  let fi = 0;
-  for (let i = 0; i < numTeams; i++) {
-    const need = 7 - teams[i].players.length;
-    for (let j = 0; j < need && fi < field.length; j++, fi++) {
-      teams[i].players.push({ id: field[fi].id, name: field[fi].name });
+  // Field players: strongest first, each goes to the team with the lowest total
+  // points that still has room, so every team ends up with a similar overall score.
+  field.sort((a, b) => (b.points || 0) - (a.points || 0));
+  field.forEach(p => {
+    const entry = { id: p.id, name: p.name, points: p.points || 0 };
+    const openTeams = teams.filter(t => t.players.length < teamCapacity);
+    if (openTeams.length) {
+      openTeams.sort((a, b) => teamPoints(a) - teamPoints(b))[0].players.push(entry);
+    } else {
+      teams.sort((a, b) => teamPoints(a) - teamPoints(b))[0].subs.push(entry);
     }
-  }
-
-  // Remaining players → subs (round-robin across teams)
-  while (fi < field.length) {
-    teams[fi % numTeams].subs.push({ id: field[fi].id, name: field[fi].name });
-    fi++;
-  }
+  });
 
   return teams;
 }
@@ -247,7 +263,7 @@ function renderTeamCards(teams) {
         <span class="team-swatch"></span>
         <div>
           <h3>${esc(team.name)}</h3>
-          <p>${(team.players || []).length} players${subs.length ? ` · ${subs.length} subs` : ''}</p>
+          <p>${(team.players || []).length} players${subs.length ? ` · ${subs.length} subs` : ''} · ${teamPoints(team)} pts</p>
         </div>
       </div>
       <div class="teams-admin-players">
@@ -263,7 +279,7 @@ function renderTeamPlayerChip(player, index, isGk, isSub = false) {
   return `<div class="teams-player-row ${isGk ? 'is-gk' : ''} ${isSub ? 'is-sub' : ''}">
     <span>${String(index + 1).padStart(2, '0')}</span>
     <strong>${esc(player.name)}</strong>
-    ${isGk ? '<em>GK</em>' : ''}
+    <em>${isGk ? 'GK' : '★'.repeat(player.points || 0) + '☆'.repeat(5 - (player.points || 0))}</em>
   </div>`;
 }
 
@@ -290,8 +306,8 @@ async function confirmTeams() {
         captainName:     null,
         name:            team.name,
         color:           team.color,
-        players:         team.players.map(p => ({ id: p.id, name: p.name })),
-        subs:            team.subs.map(p => ({ id: p.id, name: p.name })),
+        players:         team.players.map(p => ({ id: p.id, name: p.name, isGK: !!p.isGK, points: p.points || 0 })),
+        subs:            team.subs.map(p => ({ id: p.id, name: p.name, isGK: !!p.isGK, points: p.points || 0 })),
         wins:            0,
         losses:          0,
         consecutiveWins: 0,

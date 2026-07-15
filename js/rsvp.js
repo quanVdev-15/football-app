@@ -176,12 +176,19 @@ function renderEventBanner(ev) {
   banner.hidden = false;
 }
 
+// Shares its "is this session still active" rule with the admin site's
+// getAdminActiveSession() via js/session-utils.js's canReuseSession() — a
+// session that's past its date (even if never explicitly closed) should stop
+// showing up as an open poll here too.
 async function getActiveSession() {
   const config = await db.collection('config').doc('app').get();
   const currentSessionId = config.exists ? config.data().currentSessionId : null;
   if (currentSessionId) {
     const doc = await db.collection('sessions').doc(currentSessionId).get();
-    if (doc.exists && doc.data().status !== 'done') return { id: doc.id, ...doc.data() };
+    if (doc.exists) {
+      const session = { id: doc.id, ...doc.data() };
+      if (canReuseSession(session)) return session;
+    }
   }
   return null;
 }
@@ -221,41 +228,9 @@ function renderAll() {
   renderStaticSession();
   renderPageMode();
   renderCounter();
-  renderSlotsNotif();
   renderMyRsvp();
   renderGoingList();
   renderTeams();
-}
-
-function renderSlotsNotif() {
-  const notif = document.getElementById('slotsNotif');
-  if (!notif) return;
-
-  const identity   = currentIdentity();
-  const alreadyIn  = isGoing(currentPlayerRsvp(identity));
-  const cap        = getCap();
-  const going      = totalHeadcount();
-  const slotsLeft  = cap - going;
-  const pollClosed = isTeamsReady() || isLockedStatus();
-
-  // Hide when poll is closed, or player is already in
-  if (pollClosed || alreadyIn) {
-    notif.hidden = true;
-    return;
-  }
-
-  notif.hidden = false;
-
-  if (slotsLeft <= 0) {
-    notif.className = 'slots-notif is-full';
-    notif.textContent = '⛔ Danh sách đã đủ người.';
-  } else if (slotsLeft <= 3) {
-    notif.className = 'slots-notif is-urgent';
-    notif.textContent = `🔥 Chỉ còn ${slotsLeft} chỗ! Đăng ký ngay.`;
-  } else {
-    notif.className = 'slots-notif is-open';
-    notif.textContent = `👋 Còn ${slotsLeft} chỗ trống — bạn chưa đăng ký!`;
-  }
 }
 
 function renderStaticSession() {
@@ -300,7 +275,6 @@ function renderMyRsvp() {
   const going = isGoing(myRsvp);
   const btn = document.getElementById('myRsvpBtn');
 
-  document.getElementById('myRsvpName').textContent = identity?.name || '--';
   btn.textContent = going ? t('goingSelf') : t('notGoingSelf');
   btn.classList.toggle('is-going', going);
   btn.onclick = toggleMyRsvp;
@@ -614,10 +588,7 @@ function goingPlayers() {
 }
 
 function totalHeadcount() {
-  return goingPlayers().reduce((sum, p) => {
-    const guests = (p.guests || []).filter(g => g.name?.trim()).length;
-    return sum + 1 + guests;
-  }, 0);
+  return goingPlayers().length;
 }
 
 function sortedGoingPlayers(identity) {
@@ -749,13 +720,6 @@ function teamColorClass(team) {
 function initials(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0]?.slice(0, 2) || '?').toUpperCase();
-}
-
-function toDate(value) {
-  if (!value) return null;
-  if (value.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
 }
 
 function fmtDate(date) {

@@ -234,6 +234,25 @@ button {
   margin-top: 2px;
 }
 
+.rsvp-panel {
+  margin-bottom: 18px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.rsvp-panel .counter-card,
+.rsvp-panel .my-rsvp-card {
+  margin-bottom: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.rsvp-panel .my-rsvp-card {
+  border: none;
+  border-top: 1px solid var(--line);
+}
+
 .counter-card {
   margin-bottom: 18px;
   padding: 18px;
@@ -302,19 +321,6 @@ button {
   text-decoration: none;
   font-weight: 900;
 }
-
-/* ── Slots notification banner ──────────────────────────────── */
-.slots-notif {
-  margin-bottom: 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius-sm, 10px);
-  font-size: .88rem;
-  font-weight: 700;
-  text-align: center;
-}
-.slots-notif.is-open   { background: #e8f5e9; color: #1b5e20; border: 1.5px solid #a5d6a7; }
-.slots-notif.is-urgent { background: #fff3e0; color: #e65100; border: 1.5px solid #ffb74d; }
-.slots-notif.is-full   { background: #fce4ec; color: #880e4f; border: 1.5px solid #f48fb1; }
 
 .my-rsvp-card,
 .going-section {
@@ -1905,10 +1911,25 @@ button {
 }
 
 .admin-player-list.compact .admin-player {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
   min-height: 52px;
   padding: 10px 12px;
   border-radius: 10px;
   box-shadow: none;
+}
+
+.admin-player-list.compact .admin-player > div:first-child {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.admin-player-list.compact .admin-player > .star-rating,
+.admin-player-list.compact .admin-player > .switch,
+.admin-player-list.compact .admin-player > button {
+  flex: 0 0 auto;
 }
 
 .admin-player-list.compact .switch {
@@ -2230,10 +2251,43 @@ button {
 
 .admin-player {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
+}
+
+.admin-player > div:first-child {
+  min-width: 0;
+}
+
+.admin-player > div:first-child strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.star-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.star-rating button {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--line, #d8d8d8);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.star-rating button.is-filled {
+  color: #f5a623;
 }
 
 .admin-player.is-going {

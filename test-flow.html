@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Test Full Flow</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="stylesheet" href="/css/style.css?v=4">
+  <style>
+    .test-nav {
+      display: flex; gap: 6px; padding: 8px 16px;
+      background: #07120d; border-bottom: 1px solid rgba(255,255,255,.1);
+    }
+    .test-nav button {
+      flex: 1; min-height: 38px;
+      border: 1px solid rgba(255,255,255,.16); border-radius: 10px;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.6);
+      font-size: .72rem; font-weight: 900; cursor: pointer;
+    }
+    .test-nav button.active {
+      background: var(--accent); color: #073b22; border-color: var(--accent);
+    }
+    .test-step { display: none; }
+    .test-step.active { display: block; }
+
+    .setup-sheet {
+      background: var(--card); border-radius: var(--radius);
+      border: 1px solid var(--line); box-shadow: var(--shadow); padding: 20px;
+    }
+    .setup-sheet .field { margin-bottom: 14px; }
+    .setup-sheet .field label {
+      display: block; font-size: .76rem; font-weight: 700;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px;
+    }
+    .setup-sheet .field input, .setup-sheet .field textarea {
+      width: 100%; min-height: 48px; padding: 8px 14px;
+      border: 1.5px solid var(--line); border-radius: 12px;
+      font-size: 1rem; color: var(--text); background: #f9fafb; font-family: inherit;
+    }
+    .setup-sheet .field input:focus, .setup-sheet .field textarea:focus {
+      border-color: var(--primary); outline: none;
+      box-shadow: 0 0 0 3px rgba(27,67,50,.12);
+    }
+
+    /* Player picker for login */
+    .player-pick-search {
+      width: 100%; min-height: 48px; padding: 0 14px;
+      border: 1.5px solid var(--line); border-radius: 12px;
+      font-size: 1rem; color: var(--text); background: #f9fafb;
+      margin-bottom: 12px;
+    }
+    .player-pick-search:focus {
+      border-color: var(--primary); outline: none;
+      box-shadow: 0 0 0 3px rgba(27,67,50,.12);
+    }
+    .player-pick-list {
+      display: grid; gap: 6px; max-height: 420px; overflow-y: auto;
+    }
+    .player-pick-btn {
+      display: flex; align-items: center; gap: 10px;
+      min-height: 54px; padding: 10px 14px;
+      border: 1.5px solid var(--line); border-radius: 12px;
+      background: var(--card); color: var(--text);
+      font-size: .95rem; font-weight: 800; text-align: left; cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .player-pick-btn:active { transform: scale(.98); }
+    .player-pick-btn .pick-avatar {
+      display: inline-grid; place-items: center;
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      font-size: .76rem; font-weight: 950; flex-shrink: 0;
+    }
+    .player-pick-btn .pick-name { flex: 1; }
+    .player-pick-btn .pick-status {
+      font-size: .72rem; font-weight: 900; color: var(--muted);
+    }
+    .player-pick-btn.is-online {
+      border-color: #9bd5aa; background: var(--ok-bg);
+    }
+    .player-pick-btn.is-online .pick-status { color: #17623b; }
+
+    /* Poll */
+    .poll-player-row {
+      display: flex; align-items: center; gap: 10px;
+      min-height: 52px; padding: 8px 12px;
+      border-radius: 10px; background: #f8faf9;
+    }
+    .poll-player-row.is-going {
+      background: var(--ok-bg); border: 1px solid #9bd5aa;
+    }
+    .poll-player-row.is-guest { border-left: 3px solid var(--accent); }
+    .poll-player-name {
+      flex: 1; font-weight: 800; font-size: .92rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .poll-player-badges { display: flex; gap: 4px; flex-shrink: 0; }
+    .poll-toggle-btn {
+      min-height: 34px; min-width: 64px; padding: 0 10px;
+      border: 1.5px solid var(--line); border-radius: 10px;
+      background: #f9fafb; color: var(--muted);
+      font-size: .78rem; font-weight: 900; cursor: pointer;
+    }
+    .poll-toggle-btn.is-going {
+      background: var(--ok-bg); border-color: #9bd5aa; color: #17623b;
+    }
+    .guest-input-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 8px;
+      margin-top: 12px; padding: 12px;
+      border-radius: var(--radius); background: var(--card); border: 1px solid var(--line);
+    }
+    .guest-input-row input {
+      min-height: 44px; padding: 0 12px;
+      border: 1.5px solid var(--line); border-radius: 10px;
+      font-size: .92rem; color: var(--text); background: #f9fafb;
+    }
+    .guest-input-row input:focus { border-color: var(--primary); outline: none; }
+    .guest-badge {
+      display: inline-flex; align-items: center;
+      min-height: 22px; padding: 0 7px; border-radius: 999px;
+      background: #e0f2fe; color: #0369a1;
+      font-size: .68rem; font-weight: 900;
+    }
+    .online-badge {
+      display: inline-flex; align-items: center;
+      min-height: 22px; padding: 0 7px; border-radius: 999px;
+      background: var(--ok-bg); color: #17623b;
+      font-size: .68rem; font-weight: 900;
+    }
+  </style>
+</head>
+<body class="app-shell admin-page">
+
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Test</p>
+    <h1 id="stepTitle">Full Flow</h1>
+  </div>
+  <div class="topbar-actions">
+    <button class="chip-btn" type="button" onclick="resetAll()">Reset</button>
+  </div>
+</header>
+
+<nav class="test-nav">
+  <button id="navSetup" class="active" onclick="goStep('setup')">1. Setup</button>
+  <button id="navLogin" onclick="goStep('login')">2. Login</button>
+  <button id="navPoll" onclick="goStep('poll')">3. RSVP</button>
+  <button id="navRate" onclick="goStep('rate')">4. Rate</button>
+  <button id="navTeams" onclick="goStep('teams')">5. Teams</button>
+</nav>
+
+<main class="page">
+
+  <!-- STEP 1: ADMIN SETUP — pre-load all player names -->
+  <section id="stepSetup" class="test-step active">
+    <div class="setup-sheet">
+      <h2 style="margin:0 0 4px;font-size:1.1rem;font-weight:900">Admin — Player setup</h2>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:.84rem">Pre-load the names of all players. When they open the app, they'll pick their name from this list.</p>
+
+      <div class="field">
+        <label>Add one player</label>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px">
+          <input id="addOneName" type="text" placeholder="Nguyễn Văn A">
+          <button class="btn secondary btn-sm" type="button" onclick="addOnePlayer()">Add</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Bulk add (one name per line)</label>
+        <textarea id="bulkNames" rows="4" placeholder="Nguyễn Minh Quân&#10;Lê Minh Hiển&#10;Bello"></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn secondary btn-block" type="button" onclick="addBulk()">Add from text</button>
+        <button class="btn accent btn-block" type="button" onclick="seedAll()">Seed all 33</button>
+      </div>
+    </div>
+
+    <div class="admin-panel" style="margin-top:14px">
+      <div class="admin-panel-title">
+        <div>
+          <h2>Player roster</h2>
+          <p id="rosterMeta" class="subtle">0 players</p>
+        </div>
+      </div>
+      <div id="rosterList" class="admin-player-list compact"></div>
+    </div>
+  </section>
+
+  <!-- STEP 2: PLAYER LOGIN — pick your name from the list -->
+  <section id="stepLogin" class="test-step">
+    <div class="setup-sheet">
+      <h2 style="margin:0 0 4px;font-size:1.1rem;font-weight:900">Who are you?</h2>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:.84rem">Find your name and tap to log in. This is what players see when they open the app.</p>
+
+      <input id="pickSearch" class="player-pick-search" type="search" placeholder="Search your name..." oninput="renderPicker()">
+      <div id="pickList" class="player-pick-list"></div>
+    </div>
+  </section>
+
+  <!-- STEP 3: RSVP POLL -->
+  <section id="stepPoll" class="test-step">
+    <article class="counter-card">
+      <p class="session-date">Test Session — Saturday</p>
+      <div class="counter-line">
+        <strong id="pollCount">0 / 21 Going</strong>
+        <span id="pollStatus">Open</span>
+      </div>
+      <div class="progress-track"><div id="pollProgress" class="progress-fill"></div></div>
+    </article>
+
+    <div style="display:flex;gap:8px;margin:12px 0">
+      <button class="btn secondary btn-sm" type="button" onclick="rsvpAll()">All going</button>
+      <button class="btn secondary btn-sm" type="button" onclick="rsvpNone()">None going</button>
+      <button class="btn secondary btn-sm" type="button" onclick="rsvpRandom()">Random 21</button>
+    </div>
+
+    <section class="going-section">
+      <div class="going-title-row">
+        <h2>Players</h2>
+        <span id="pollBadge" class="pill">0</span>
+      </div>
+      <div id="pollList" class="admin-player-list compact"></div>
+    </section>
+
+    <!-- Guest input -->
+    <section class="going-section" style="margin-top:14px">
+      <div class="going-title-row">
+        <h2>Add a guest</h2>
+        <span id="guestBadge" class="pill">0</span>
+      </div>
+      <p style="margin:-6px 0 10px;color:var(--muted);font-size:.82rem;font-weight:700">One-time players without an account.</p>
+      <div class="guest-input-row">
+        <input id="guestNameInput" type="text" placeholder="Guest name...">
+        <button class="btn accent btn-sm" type="button" onclick="addGuest()">Add</button>
+      </div>
+      <div id="guestList" class="admin-player-list compact" style="margin-top:10px"></div>
+    </section>
+  </section>
+
+  <!-- STEP 4: RATE -->
+  <section id="stepRate" class="test-step">
+    <div class="admin-panel">
+      <div class="admin-panel-title">
+        <div>
+          <h2>Rate going players</h2>
+          <p id="rateMeta" class="subtle">GKs don't get rated</p>
+        </div>
+      </div>
+      <div id="rateList" class="admin-player-list compact"></div>
+    </div>
+  </section>
+
+  <!-- STEP 5: TEAMS -->
+  <section id="stepTeams" class="test-step">
+    <div id="noGoingMsg" class="state-card" style="display:none">
+      <h2>No players going</h2>
+      <p>Go back and RSVP some players first.</p>
+    </div>
+    <div id="teamCards" class="teams-admin-grid"></div>
+    <div id="teamSummary" class="admin-panel" style="display:none;text-align:center;padding:16px;margin-top:12px"></div>
+  </section>
+
+</main>
+
+<div style="position:sticky;bottom:0;padding:12px 16px;background:linear-gradient(to top,var(--bg) 70%,transparent)">
+  <button id="mainAction" class="btn accent btn-block" style="min-height:54px;font-size:1rem" type="button" onclick="mainAction()">Next →</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Constants ──
+const SEED = [
+  'Bello', 'Bùi Chí Minh', 'Công Danh', 'Công Minh Lê', 'Dinh Van Duc',
+  'Duy Côngg', 'Duy Nguyễn Trịnh', 'Đặng Xuân Trường', 'Đức Long', 'Đức Thịnh',
+  'Lê Chiến', 'Lê Minh Hiển', 'Long Nghĩa', 'Long Tran', 'Mạnh Đức',
+  'Mỹ Xuồi', 'Ngọc Phúc', 'Nguyen Hoàng Anh', 'Nguyen Hoang Huy', 'Nguyễn Công Thuận',
+  'Nguyễn Hiếu', 'Nguyễn Hiển', 'Nguyễn Hoàng Longg', 'Nguyễn Minh Quân', 'Nhật Quang',
+  'Phạm Xuân Duy', 'Quân Trần', 'Le Doan Anh Quan', 'Tuấn Linh', 'Trần Đức Anh',
+  'Trần Hà', 'Thành Nam', 'Nam Khánhh',
+];
+const STORAGE_KEY = 'test_flow_roster';
+const MAX_POINTS = 5;
+const DEFAULT_POINTS = 3;
+const CAP = 21;
+
+// ── State ──
+let roster = [];       // { id, name, isGK, points, loggedIn }
+let rsvpStatus = {};   // { [id]: true/false }
+let guests = [];       // { id, name, going, points, isGuest }
+let currentStep = 'setup';
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function initials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? parts[0][0] + parts[parts.length-1][0] : parts[0]?.slice(0,2) || '?').toUpperCase();
+}
+
+// ── Persistence ──
+function saveRoster() { localStorage.setItem(STORAGE_KEY, JSON.stringify(roster)); }
+function loadRoster() {
+  try { roster = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(_) { roster = []; }
+}
+
+// ── Navigation ──
+const STEPS = ['setup','login','poll','rate','teams'];
+function goStep(step) {
+  currentStep = step;
+  STEPS.forEach(s => {
+    const id = 'step' + s[0].toUpperCase() + s.slice(1);
+    document.getElementById(id).classList.toggle('active', s === step);
+    document.getElementById('nav' + s[0].toUpperCase() + s.slice(1)).classList.toggle('active', s === step);
+  });
+  const titles = { setup: 'Admin Setup', login: 'Player Login', poll: 'RSVP Poll', rate: 'Rate Players', teams: 'Teams' };
+  document.getElementById('stepTitle').textContent = titles[step];
+  const actions = { setup: 'Next → Player Login', login: 'Next → RSVP', poll: 'Next → Rate', rate: 'Split teams →', teams: 'Reshuffle' };
+  document.getElementById('mainAction').textContent = actions[step];
+  if (step === 'login') renderPicker();
+  if (step === 'poll') renderPoll();
+  if (step === 'rate') renderRate();
+  if (step === 'teams') doSplit();
+}
+
+function mainAction() {
+  if (currentStep === 'teams') { doSplit(); return; }
+  const next = STEPS[STEPS.indexOf(currentStep) + 1];
+  if (next) goStep(next);
+}
+
+// ── Step 1: Admin Setup ──
+function addOnePlayer() {
+  const input = document.getElementById('addOneName');
+  const name = input.value.trim();
+  if (!name) { toast('Enter a name', 'error'); return; }
+  if (roster.find(p => p.name.toLowerCase() === name.toLowerCase())) { toast('Already in roster', ''); return; }
+  const id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  roster.push({ id, name, isGK: false, points: DEFAULT_POINTS, loggedIn: false });
+  saveRoster();
+  input.value = '';
+  renderRoster();
+  toast(`${name} added`, 'success');
+}
+
+function addBulk() {
+  const textarea = document.getElementById('bulkNames');
+  const names = textarea.value.split('\n').map(n => n.trim()).filter(Boolean);
+  if (!names.length) return;
+  const existing = new Set(roster.map(p => p.name.toLowerCase()));
+  let added = 0;
+  names.forEach(name => {
+    if (existing.has(name.toLowerCase())) return;
+    const id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    roster.push({ id, name, isGK: false, points: DEFAULT_POINTS, loggedIn: false });
+    existing.add(name.toLowerCase());
+    added++;
+  });
+  saveRoster();
+  textarea.value = '';
+  renderRoster();
+  toast(added ? `Added ${added} players` : 'All already in roster', added ? 'success' : '');
+}
+
+function seedAll() {
+  const existing = new Set(roster.map(p => p.name.toLowerCase()));
+  let added = 0;
+  SEED.forEach(name => {
+    if (existing.has(name.toLowerCase())) return;
+    const id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    roster.push({ id, name, isGK: false, points: DEFAULT_POINTS, loggedIn: false });
+    existing.add(name.toLowerCase());
+    added++;
+  });
+  saveRoster();
+  renderRoster();
+  toast(added ? `Seeded ${added} players` : 'All already in roster', added ? 'success' : '');
+}
+
+function toggleGK(id) {
+  const p = roster.find(x => x.id === id);
+  if (p) { p.isGK = !p.isGK; saveRoster(); renderRoster(); }
+}
+
+function removeFromRoster(id) {
+  roster = roster.filter(p => p.id !== id);
+  delete rsvpStatus[id];
+  saveRoster();
+  renderRoster();
+}
+
+function renderRoster() {
+  const loggedIn = roster.filter(p => p.loggedIn).length;
+  document.getElementById('rosterMeta').textContent = `${roster.length} players · ${loggedIn} logged in`;
+  if (!roster.length) {
+    document.getElementById('rosterList').innerHTML = '<div class="pay-empty">No players yet. Add names above.</div>';
+    return;
+  }
+  const sorted = [...roster].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+  document.getElementById('rosterList').innerHTML = sorted.map(p => `
+    <article class="admin-player">
+      <div>
+        <strong>${esc(p.name)}</strong>
+        <small>${p.loggedIn ? 'Logged in' : 'Not logged in yet'}${p.isGK ? ' · GK' : ''}</small>
+      </div>
+      ${p.isGK ? '<span class="gk-badge">GK</span>' : ''}
+      <button class="gk-badge" style="cursor:pointer;border:0;min-height:28px" type="button" onclick="toggleGK('${p.id}')">${p.isGK ? 'GK ✓' : 'Set GK'}</button>
+      <button class="chip-btn danger" type="button" onclick="removeFromRoster('${p.id}')" style="min-height:32px;font-size:.72rem">✕</button>
+    </article>
+  `).join('');
+}
+
+// ── Step 2: Player Login (pick from list) ──
+function renderPicker() {
+  const search = (document.getElementById('pickSearch')?.value || '').toLowerCase().trim();
+  const filtered = roster.filter(p => !search || p.name.toLowerCase().includes(search));
+  const sorted = [...filtered].sort((a, b) => {
+    // Logged-in players at the bottom
+    if (a.loggedIn !== b.loggedIn) return a.loggedIn ? 1 : -1;
+    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+  });
+
+  if (!roster.length) {
+    document.getElementById('pickList').innerHTML = '<div class="pay-empty">No players in roster. Go to Setup first.</div>';
+    return;
+  }
+
+  if (!sorted.length) {
+    document.getElementById('pickList').innerHTML = '<div class="pay-empty">No match found.</div>';
+    return;
+  }
+
+  document.getElementById('pickList').innerHTML = sorted.map(p => `
+    <button class="player-pick-btn ${p.loggedIn ? 'is-online' : ''}" type="button" onclick="pickPlayer('${p.id}')">
+      <span class="pick-avatar">${initials(p.name)}</span>
+      <span class="pick-name">${esc(p.name)}</span>
+      <span class="pick-status">${p.loggedIn ? '● Online' : 'Tap to login'}</span>
+    </button>
+  `).join('');
+}
+
+function pickPlayer(id) {
+  const p = roster.find(x => x.id === id);
+  if (!p) return;
+  if (p.loggedIn) {
+    // Log out
+    p.loggedIn = false;
+    rsvpStatus[id] = false;
+    saveRoster();
+    renderPicker();
+    toast(`${p.name} logged out`, '');
+    return;
+  }
+  p.loggedIn = true;
+  saveRoster();
+  renderPicker();
+  renderRoster();
+  toast(`${p.name} logged in!`, 'success');
+}
+
+// ── Step 3: RSVP Poll ──
+function allParticipants() {
+  const loggedIn = roster.filter(p => p.loggedIn);
+  const list = loggedIn.map(p => ({ ...p, going: !!rsvpStatus[p.id], isGuest: false }));
+  guests.forEach(g => list.push({ ...g, isGuest: true }));
+  return list;
+}
+
+function getGoingCount() { return allParticipants().filter(p => p.going).length; }
+
+function renderPoll() {
+  const all = allParticipants();
+  const loggedIn = roster.filter(p => p.loggedIn);
+  const going = getGoingCount();
+  document.getElementById('pollCount').textContent = `${going} / ${CAP} Going`;
+  document.getElementById('pollProgress').style.width = `${Math.min(100, going / CAP * 100)}%`;
+  document.getElementById('pollStatus').textContent = going >= CAP ? 'Full' : 'Open';
+  document.getElementById('pollBadge').textContent = loggedIn.length;
+  document.getElementById('guestBadge').textContent = guests.length;
+
+  if (!loggedIn.length) {
+    document.getElementById('pollList').innerHTML = '<div class="pay-empty">No players logged in. Go to Login step first.</div>';
+  } else {
+    const sorted = [...loggedIn].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+    document.getElementById('pollList').innerHTML = sorted.map(p => {
+      const isGoing = !!rsvpStatus[p.id];
+      return `
+      <div class="poll-player-row ${isGoing ? 'is-going' : ''}">
+        <span class="roster-number">${isGoing ? '✓' : '-'}</span>
+        <span class="poll-player-name">${esc(p.name)}</span>
+        <span class="poll-player-badges">
+          ${p.isGK ? '<span class="gk-badge">GK</span>' : ''}
+        </span>
+        <button class="poll-toggle-btn ${isGoing ? 'is-going' : ''}" type="button" onclick="toggleRsvp('${p.id}')">
+          ${isGoing ? 'Going' : 'Not going'}
+        </button>
+      </div>`;
+    }).join('');
+  }
+  renderGuests();
+}
+
+function renderGuests() {
+  const list = document.getElementById('guestList');
+  if (!guests.length) { list.innerHTML = ''; return; }
+  list.innerHTML = guests.map(g => `
+    <div class="poll-player-row is-guest ${g.going ? 'is-going' : ''}">
+      <span class="roster-number">${g.going ? '✓' : '-'}</span>
+      <span class="poll-player-name">${esc(g.name)}</span>
+      <span class="poll-player-badges"><span class="guest-badge">Guest</span></span>
+      <button class="poll-toggle-btn ${g.going ? 'is-going' : ''}" type="button" onclick="toggleGuestRsvp('${g.id}')" style="min-width:50px">
+        ${g.going ? 'Going' : 'Out'}
+      </button>
+      <button class="chip-btn danger" type="button" onclick="removeGuest('${g.id}')" style="min-height:32px;font-size:.7rem;padding:0 8px">✕</button>
+    </div>
+  `).join('');
+}
+
+function toggleRsvp(id) { rsvpStatus[id] = !rsvpStatus[id]; renderPoll(); }
+function toggleGuestRsvp(id) { const g = guests.find(x => x.id === id); if (g) g.going = !g.going; renderPoll(); }
+
+function addGuest() {
+  const input = document.getElementById('guestNameInput');
+  const name = input.value.trim();
+  if (!name) { toast('Enter a guest name', 'error'); return; }
+  if (guests.find(g => g.name.toLowerCase() === name.toLowerCase())) { toast('Guest already added', ''); return; }
+  guests.push({
+    id: 'guest_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    name, going: true, isGK: false, points: DEFAULT_POINTS, isGuest: true
+  });
+  input.value = '';
+  renderPoll();
+  toast(`${name} added as guest (going)`, 'success');
+}
+
+function removeGuest(id) { guests = guests.filter(g => g.id !== id); renderPoll(); }
+
+function rsvpAll() {
+  roster.filter(p => p.loggedIn).forEach(p => rsvpStatus[p.id] = true);
+  guests.forEach(g => g.going = true);
+  renderPoll();
+}
+function rsvpNone() {
+  roster.forEach(p => rsvpStatus[p.id] = false);
+  guests.forEach(g => g.going = false);
+  renderPoll();
+}
+function rsvpRandom() {
+  roster.forEach(p => rsvpStatus[p.id] = false);
+  guests.forEach(g => g.going = false);
+  const loggedIn = roster.filter(p => p.loggedIn);
+  const indices = loggedIn.map((_, i) => i);
+  shuffle(indices);
+  indices.slice(0, Math.min(CAP, loggedIn.length)).forEach(i => rsvpStatus[loggedIn[i].id] = true);
+  renderPoll();
+}
+
+// ── Step 4: Rate ──
+function renderRate() {
+  const going = allParticipants().filter(p => p.going);
+  document.getElementById('rateMeta').textContent = `${going.length} going — GKs don't get rated`;
+  if (!going.length) {
+    document.getElementById('rateList').innerHTML = '<div class="pay-empty">No players going. Go back to RSVP step.</div>';
+    return;
+  }
+  const sorted = [...going].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+  document.getElementById('rateList').innerHTML = sorted.map(p => {
+    const srcId = p.isGuest ? 'guest:' + p.id : p.id;
+    return `
+    <article class="admin-player">
+      <div>
+        <strong>${esc(p.name)}</strong>
+        <small>${p.isGK ? 'Goalkeeper' : p.isGuest ? 'Guest' : 'Field player'}</small>
+      </div>
+      ${p.isGuest ? '<span class="guest-badge">Guest</span>' : ''}
+      ${p.isGK
+        ? '<span class="gk-badge">GK</span>'
+        : `<div class="star-rating" data-rate-id="${srcId}">
+            ${Array.from({length: MAX_POINTS}, (_, s) =>
+              `<button type="button" class="${s < p.points ? 'is-filled' : ''}" data-val="${s+1}">★</button>`
+            ).join('')}
+          </div>`}
+    </article>`;
+  }).join('');
+
+  document.querySelectorAll('[data-rate-id]').forEach(wrap => {
+    const rawId = wrap.dataset.rateId;
+    wrap.querySelectorAll('[data-val]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = Number(btn.dataset.val);
+        if (rawId.startsWith('guest:')) {
+          const g = guests.find(x => x.id === rawId.slice(6));
+          if (g) g.points = val;
+        } else {
+          const p = roster.find(x => x.id === rawId);
+          if (p) { p.points = val; saveRoster(); }
+        }
+        renderRate();
+      });
+    });
+  });
+}
+
+// ── Step 5: Teams ──
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function teamPoints(team) {
+  return [...team.players, ...team.subs].filter(p => !p.isGK).reduce((sum, p) => sum + (p.points || 0), 0);
+}
+
+function buildTeams(list, numTeams) {
+  const gks   = shuffle(list.filter(p => p.isGK));
+  const field = shuffle(list.filter(p => !p.isGK));
+  const NAMES  = ['Red', 'Blue', 'Yellow'];
+  const COLORS = ['red', 'blue', 'green'];
+  const teams = Array.from({ length: numTeams }, (_, i) => ({
+    name: 'Đội ' + NAMES[i], color: COLORS[i], players: [], subs: []
+  }));
+
+  gks.forEach(gk => {
+    const open = teams.filter(t => !t.players.some(p => p.isGK));
+    const target = open.length ? open[0] : teams[0];
+    const entry = { name: gk.name, isGK: true, isGuest: gk.isGuest, points: 0 };
+    if (open.length) target.players.push(entry); else target.subs.push(entry);
+  });
+
+  field.sort((a, b) => (b.points || 0) - (a.points || 0));
+  field.forEach(p => {
+    const entry = { name: p.name, points: p.points || 0, isGuest: p.isGuest };
+    const open = teams.filter(t => t.players.length < 7);
+    if (open.length) open.sort((a, b) => teamPoints(a) - teamPoints(b))[0].players.push(entry);
+    else teams.sort((a, b) => teamPoints(a) - teamPoints(b))[0].subs.push(entry);
+  });
+  return teams;
+}
+
+function doSplit() {
+  const going = allParticipants().filter(p => p.going).map(p => ({
+    name: p.name, isGK: p.isGK, points: p.isGK ? 0 : p.points, isGuest: p.isGuest
+  }));
+  if (going.length < 3) {
+    document.getElementById('noGoingMsg').style.display = '';
+    document.getElementById('teamCards').innerHTML = '';
+    document.getElementById('teamSummary').style.display = 'none';
+    return;
+  }
+  document.getElementById('noGoingMsg').style.display = 'none';
+  const teams = buildTeams(going, 3);
+  document.getElementById('teamCards').innerHTML = teams.map(team => {
+    const gkP = team.players.filter(p => p.isGK);
+    const fieldP = team.players.filter(p => !p.isGK);
+    const subs = team.subs;
+    return `<article class="teams-admin-card team-color-${team.color}">
+      <div class="teams-admin-head">
+        <span class="team-swatch"></span>
+        <div>
+          <h3>${esc(team.name)}</h3>
+          <p>${team.players.length} players${subs.length ? ' · ' + subs.length + ' subs' : ''} · ${teamPoints(team)} pts</p>
+        </div>
+      </div>
+      <div class="teams-admin-players">
+        ${gkP.map((p, i) => playerRow(p, i, true)).join('')}
+        ${fieldP.map((p, i) => playerRow(p, i + gkP.length, false)).join('')}
+      </div>
+      ${subs.length ? `<details class="teams-subs" open><summary>${subs.length} subs</summary><div>${subs.map((p, i) => playerRow(p, i, !!p.isGK, true)).join('')}</div></details>` : ''}
+    </article>`;
+  }).join('');
+
+  const pts = teams.map(t => teamPoints(t));
+  const summary = document.getElementById('teamSummary');
+  summary.style.display = '';
+  summary.innerHTML = `<strong>Team totals: ${pts.join(' / ')}</strong><br>
+    <span style="color:var(--muted);font-size:.88rem">Max difference: ${Math.max(...pts) - Math.min(...pts)} pts</span>`;
+}
+
+function playerRow(p, i, isGK, isSub) {
+  return `<div class="teams-player-row ${isGK ? 'is-gk' : ''} ${isSub ? 'is-sub' : ''}">
+    <span>${String(i+1).padStart(2,'0')}</span>
+    <strong>${esc(p.name)}${p.isGuest ? ' <span class="guest-badge" style="margin-left:4px">Guest</span>' : ''}</strong>
+    <em>${isGK ? 'GK' : '★'.repeat(p.points) + '☆'.repeat(5 - p.points)}</em>
+  </div>`;
+}
+
+// ── Reset ──
+function resetAll() {
+  if (!confirm('Reset everything? This clears all players and settings.')) return;
+  roster = []; rsvpStatus = {}; guests = [];
+  localStorage.removeItem(STORAGE_KEY);
+  goStep('setup');
+  renderRoster();
+  toast('Reset complete', 'success');
+}
+
+// ── Toast ──
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'toast show ' + (type || '');
+  clearTimeout(el._t); el._t = setTimeout(() => el.className = 'toast', 2200);
+}
+
+// ── Init ──
+loadRoster();
+renderRoster();
+</script>
+</body>
+</html>

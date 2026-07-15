@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Admin - Bóng Đá Thứ 7</title>
   <meta name="theme-color" content="#1b4332">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=4">
 </head>
 <body class="app-shell admin-page admin-hub">
   <header class="topbar admin-hub-topbar">
@@ -35,10 +35,6 @@
           <span>Open poll</span>
           <strong>RSVP</strong>
         </button>
-        <button class="admin-action-card" type="button" onclick="lockPoll()">
-          <span>Lock list</span>
-          <strong>Lock</strong>
-        </button>
         <a class="admin-action-card accent" href="/admin/teams.html">
           <span>Split teams</span>
           <strong>Teams</strong>
@@ -47,6 +43,11 @@
         <a class="admin-action-card" href="/admin/events.html">
           <span>Friendlies</span>
           <strong>Events</strong>
+        </a>
+
+        <a class="admin-action-card" href="/admin/ratings.html">
+          <span>Skill</span>
+          <strong>Ratings</strong>
         </a>
       </div>
 
@@ -122,7 +123,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/js/admin-auth.js"></script>
+  <script src="/js/session-utils.js?v=1"></script>
+  <script src="/js/admin-auth.js?v=4"></script>
   <script>
     window.addEventListener('DOMContentLoaded', () => requireAuth(initAdmin));
 
@@ -138,27 +140,6 @@
       hideSessionForm();
       openPollWithDate(dateStr, time, location);
       sendPollNotification(dateStr);
-    }
-
-    async function endSessionAndGoPayment() {
-      try {
-        if (!currentSession) {
-          toast('No active session to end.', 'error');
-          return;
-        }
-        await db.collection('sessions').doc(currentSession.id).set({
-          status: 'done',
-          endedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-        await db.collection('config').doc('app').set({
-          currentSessionId: null
-        }, { merge: true });
-        window.location.href = `/admin/payment.html?sessionId=${encodeURIComponent(currentSession.id)}`;
-      } catch (error) {
-        console.error(error);
-        toast('Failed to end session.', 'error');
-      }
     }
 
     function sendPollNotification(dateStr) {
