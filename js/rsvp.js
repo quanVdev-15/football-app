@@ -240,13 +240,19 @@ function renderStaticSession() {
 
 function renderCounter() {
   const cap = getCap();
-  const going = totalHeadcount();
+  const allGoing = sortedGoingByTime();
+  const starterCount = Math.min(allGoing.length, cap);
+  const subsCount = Math.max(0, allGoing.length - cap);
   const isReady = isTeamsReady();
-  const isFull = !isReady && going >= cap;
+  const isFull = !isReady && starterCount >= cap;
 
-  document.getElementById('goingCount').textContent = `${going} / ${cap} ${t('going')}`;
+  const counterText = subsCount > 0
+    ? `${starterCount} / ${cap} ${t('going')} + ${subsCount} ${t('subs').toLowerCase()}`
+    : `${allGoing.length} / ${cap} ${t('going')}`;
+
+  document.getElementById('goingCount').textContent = counterText;
   document.getElementById('lockText').textContent = isLockedStatus() ? t('locked') : (isFull ? t('full') : t('spotsOpen'));
-  document.getElementById('progressFill').style.width = `${Math.min(100, Math.round((going / cap) * 100))}%`;
+  document.getElementById('progressFill').style.width = `${Math.min(100, Math.round((starterCount / cap) * 100))}%`;
   document.getElementById('counterCard').classList.toggle('is-full', isFull);
 
   const badge = document.getElementById('statusBadge');
@@ -275,7 +281,13 @@ function renderMyRsvp() {
   const going = isGoing(myRsvp);
   const btn = document.getElementById('myRsvpBtn');
 
-  btn.textContent = going ? t('goingSelf') : t('notGoingSelf');
+  if (going) {
+    btn.textContent = t('goingSelf');
+  } else if (goingPlayers().length >= getCap()) {
+    btn.textContent = 'Đăng ký dự bị';  // "Join as sub"
+  } else {
+    btn.textContent = t('notGoingSelf');
+  }
   btn.classList.toggle('is-going', going);
   btn.onclick = toggleMyRsvp;
 }
@@ -288,10 +300,19 @@ function renderGoingList() {
   }
 
   const identity = currentIdentity();
-  const confirmed = sortedGoingPlayers(identity);
-  document.getElementById('goingListBadge').textContent = confirmed.length;
+  const allGoing = sortedGoingByTime();
+  const cap = getCap();
+  const starters = allGoing.slice(0, cap);
+  const subs = allGoing.slice(cap);
 
-  list.innerHTML = confirmed.length ? confirmed.map((player, index) => {
+  document.getElementById('goingListBadge').textContent = allGoing.length;
+
+  if (!allGoing.length) {
+    list.innerHTML = `<li class="going-empty">${t('emptyGoing')}</li>`;
+    return;
+  }
+
+  const starterHtml = starters.map((player, index) => {
     const isMe = isCurrentPlayer(player, identity);
     const isGk = isPlayerGk(player);
     return `<li class="name-chip ${isMe ? 'is-me' : ''}" style="--stagger:${index}">
@@ -300,7 +321,25 @@ function renderGoingList() {
       ${isGk ? `<span class="name-chip-gk">GK</span>` : ''}
       ${isMe ? `<span class="name-chip-you">Bạn</span>` : ''}
     </li>`;
-  }).join('') : `<li class="going-empty">${t('emptyGoing')}</li>`;
+  }).join('');
+
+  const subsHtml = subs.length ? `
+    <li class="subs-divider" style="--stagger:${starters.length}">
+      <span class="subs-divider-text">${t('subs')} (${subs.length})</span>
+    </li>
+    ${subs.map((player, index) => {
+      const isMe = isCurrentPlayer(player, identity);
+      const isGk = isPlayerGk(player);
+      return `<li class="name-chip is-sub ${isMe ? 'is-me' : ''}" style="--stagger:${starters.length + 1 + index}">
+        <span class="name-chip-num sub-num">S${String(index + 1).padStart(1, '0')}</span>
+        <span class="name-chip-text">${esc(playerName(player) || '?')}</span>
+        ${isGk ? `<span class="name-chip-gk">GK</span>` : ''}
+        ${isMe ? `<span class="name-chip-you">Bạn</span>` : ''}
+      </li>`;
+    }).join('')}
+  ` : '';
+
+  list.innerHTML = starterHtml + subsHtml;
 }
 
 function renderTeams() {
@@ -585,12 +624,11 @@ function totalHeadcount() {
   return goingPlayers().length;
 }
 
-function sortedGoingPlayers(identity) {
+function sortedGoingByTime() {
   return goingPlayers().sort((a, b) => {
-    const aIsMe = isCurrentPlayer(a, identity);
-    const bIsMe = isCurrentPlayer(b, identity);
-    if (aIsMe !== bIsMe) return aIsMe ? -1 : 1;
-    return playerName(a).localeCompare(playerName(b), lang === 'vi' ? 'vi' : 'en', { sensitivity: 'base' });
+    const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.updatedAt?.seconds || 0) * 1000;
+    const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : (b.updatedAt?.seconds || 0) * 1000;
+    return aTime - bTime;
   });
 }
 
@@ -615,19 +653,21 @@ function isLockedStatus() {
 }
 
 function isFullStatus() {
-  return session?.status === 'full' || (!isTeamsReady() && totalHeadcount() >= getCap());
+  return session?.status === 'full' || (!isTeamsReady() && goingPlayers().length >= getCap());
 }
 
 function shouldHideMyRsvp() {
-  if (isTeamsReady() || isLockedStatus()) return true;
-  const identity = currentIdentity();
-  return isFullStatus() && !isGoing(currentPlayerRsvp(identity));
+  return isTeamsReady() || isLockedStatus();
 }
 
 function statusLabel() {
   if (isTeamsReady()) return { label: t('teamsReady'), className: 'is-ready' };
   if (isLockedStatus()) return { label: t('locked'), className: 'is-locked' };
-  if (isFullStatus()) return { label: t('full'), className: 'is-full' };
+  if (isFullStatus()) {
+    const subsCount = Math.max(0, goingPlayers().length - getCap());
+    const label = subsCount > 0 ? `${t('full')} +${subsCount} subs` : t('full');
+    return { label, className: 'is-full' };
+  }
   return { label: t('open'), className: 'is-open' };
 }
 

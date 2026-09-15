@@ -619,6 +619,50 @@ button {
   font-weight: 800;
 }
 
+.subs-divider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 4px;
+  animation: playerReveal .28s ease both;
+  animation-delay: calc(var(--stagger) * 25ms);
+}
+
+.subs-divider::before,
+.subs-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.subs-divider-text {
+  font-size: .72rem;
+  font-weight: 900;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+.name-chip.is-sub {
+  background: #f8f9fa;
+  border: 1px dashed var(--line);
+  opacity: .82;
+}
+
+.name-chip.is-sub.is-me {
+  background: #f0faf3;
+  border: 1.5px dashed #95d5b2;
+  opacity: 1;
+}
+
+.sub-num {
+  color: #b0b8b3;
+  font-size: .64rem;
+}
+
 .player-avatar {
   display: inline-grid;
   place-items: center;
