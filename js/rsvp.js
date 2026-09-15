@@ -620,10 +620,6 @@ function goingPlayers() {
   return Object.values(rsvps).filter(isGoing);
 }
 
-function totalHeadcount() {
-  return goingPlayers().length;
-}
-
 function sortedGoingByTime() {
   return goingPlayers().sort((a, b) => {
     const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.updatedAt?.seconds || 0) * 1000;
