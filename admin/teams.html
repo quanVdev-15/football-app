@@ -76,7 +76,8 @@
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
 let session = null;
-let rsvps   = [];   // { id, name, isGoalkeeper }
+let rsvps     = [];   // starters: first `cap` RSVPs sorted by updatedAt
+let rsvpSubs  = [];   // overflow: RSVPs beyond the cap (subs)
 let _pendingTeams = null;
 
 const TEAM_NAME_ARR  = { 3: ['Red', 'Blue', 'Yellow'],         4: ['Red', 'Blue', 'Yellow', 'Purple'] };
@@ -112,21 +113,33 @@ async function init() {
   const playerMap = {};
   playersSnap.docs.forEach(d => { playerMap[d.id] = d.data(); });
 
-  // Load confirmed RSVPs
+  // Load confirmed RSVPs, sorted by timestamp (first-come-first-served)
   const rsvpSnap = await db.collection('sessions').doc(session.id)
     .collection('rsvps').get();
-  rsvps = [];
+  const allRsvps = [];
   rsvpSnap.docs.forEach(d => {
     const data = d.data();
     if (!['in', 'going'].includes(data.status || data.vote)) return;
     const pData = playerMap[d.id] || {};
-    rsvps.push({
+    allRsvps.push({
       id: d.id,
       name: data.playerName,
       isGoalkeeper: pData.isGoalkeeper || false,
-      points: Number(pData.points) || DEFAULT_POINTS
+      points: Number(pData.points) || DEFAULT_POINTS,
+      updatedAt: data.updatedAt,
     });
   });
+
+  // Sort by RSVP time — first come first served
+  allRsvps.sort((a, b) => {
+    const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.updatedAt?.seconds || 0) * 1000;
+    const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : (b.updatedAt?.seconds || 0) * 1000;
+    return aTime - bTime;
+  });
+
+  const cap = Number(session.rsvpCap) || DEFAULT_CAP;
+  rsvps    = allRsvps.slice(0, cap);   // starters
+  rsvpSubs = allRsvps.slice(cap);      // overflow subs
 
   if (!rsvps.length) {
     document.getElementById('noRsvpMsg').style.display = '';
@@ -160,14 +173,19 @@ function showTeamsResult(confirmLabel) {
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 function renderSummary() {
-  const gkCount = rsvps.filter(p => p.isGoalkeeper).length;
-  document.getElementById('totalBadge').textContent = rsvps.length;
+  const cap         = Number(session?.rsvpCap) || DEFAULT_CAP;
+  const total       = rsvps.length + rsvpSubs.length;
+  const starterCount = rsvps.length;
+  const subCount    = rsvpSubs.length;
+  const gkCount     = rsvps.filter(p => p.isGoalkeeper).length;
+  document.getElementById('totalBadge').textContent = total;
   document.getElementById('summaryMeta').innerHTML =
-    `${rsvps.length} players · ${gkCount} GK`;
-  const visible = rsvps.slice(0, PLAYER_PREVIEW_LIMIT);
+    `${starterCount} starters${subCount ? ` · ${subCount} subs` : ''} · ${gkCount} GK`;
+  const allVisible = [...rsvps, ...rsvpSubs];
+  const visible = allVisible.slice(0, PLAYER_PREVIEW_LIMIT);
   document.getElementById('playerChips').innerHTML = visible
     .map(p => `<span class="admin-going-chip ${p.isGoalkeeper ? 'is-gk' : ''}">${esc(p.name)}${p.isGoalkeeper ? ' · GK' : ''}</span>`)
-    .join('') + (rsvps.length > visible.length ? `<span class="admin-going-chip is-more">+${rsvps.length - visible.length}</span>` : '');
+    .join('') + (allVisible.length > visible.length ? `<span class="admin-going-chip is-more">+${allVisible.length - visible.length}</span>` : '');
 }
 
 // ─── Remix ────────────────────────────────────────────────────────────────────
@@ -177,7 +195,7 @@ function getNumTeams() {
 
 function doRemix() {
   const numTeams = getNumTeams();
-  const teams = buildTeams([...rsvps], numTeams, getTeamCapacity(numTeams));
+  const teams = buildTeams([...rsvps], numTeams, getTeamCapacity(numTeams), [...rsvpSubs]);
   _pendingTeams = teams;
 
   // GK warning
@@ -215,7 +233,7 @@ function teamPoints(team) {
   return [...team.players, ...team.subs].filter(p => !p.isGK).reduce((sum, p) => sum + (p.points || 0), 0);
 }
 
-function buildTeams(players, numTeams, teamCapacity) {
+function buildTeams(players, numTeams, teamCapacity, overflowSubs = []) {
   // Randomize first so players with equal points still land on random teams.
   const gks   = shuffle(players.filter(p => p.isGoalkeeper));
   const field = shuffle(players.filter(p => !p.isGoalkeeper));
@@ -247,6 +265,12 @@ function buildTeams(players, numTeams, teamCapacity) {
     } else {
       teams.sort((a, b) => teamPoints(a) - teamPoints(b))[0].subs.push(entry);
     }
+  });
+
+  // Distribute RSVP overflow subs evenly across teams (round-robin by arrival order)
+  overflowSubs.forEach((p, i) => {
+    const entry = { id: p.id, name: p.name, isGK: !!p.isGoalkeeper, points: p.points || 0 };
+    teams[i % numTeams].subs.push(entry);
   });
 
   return teams;
