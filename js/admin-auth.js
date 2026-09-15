@@ -8,6 +8,7 @@ const MAX_PLAYER_POINTS = 5;
 let pinBuffer = '';
 let currentSession = null;
 let adminPlayers = [];
+let adminPendingPlayers = [];
 let adminRsvps = {};
 let adminUnsubSession = null;
 let adminUnsubRsvps = null;
@@ -207,7 +208,9 @@ function subscribeAdminRsvps(sessionId) {
 function subscribeAdminPlayers() {
   if (adminUnsubPlayers) adminUnsubPlayers();
   adminUnsubPlayers = db.collection('players').orderBy('name').onSnapshot(snap => {
-    adminPlayers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(player => !player.pending);
+    const all = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    adminPlayers = all.filter(player => !player.pending);
+    adminPendingPlayers = all.filter(player => player.pending);
     renderAdmin();
   });
 }
@@ -216,6 +219,7 @@ function renderAdmin() {
   applyAdminI18n();
   renderAdminSession();
   renderAdminPlayers();
+  renderPendingPlayers();
 }
 
 function renderAdminSession() {
@@ -313,6 +317,45 @@ function renderAdminPlayers() {
       btn.addEventListener('click', () => setPlayerPoints(wrap.dataset.starPlayer, Number(btn.dataset.starValue)));
     });
   });
+}
+
+function renderPendingPlayers() {
+  const section = document.getElementById('pendingSection');
+  if (!section) return;
+
+  if (!adminPendingPlayers.length) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+  document.getElementById('pendingCount').textContent = `${adminPendingPlayers.length} waiting for approval`;
+
+  const list = document.getElementById('pendingList');
+  list.innerHTML = adminPendingPlayers.map(player => `
+    <article class="admin-player">
+      <div>
+        <strong>${esc(player.name || 'No name')}</strong>
+        <small>Guest · pending approval</small>
+      </div>
+      <button class="btn btn-sm secondary" type="button" onclick="approvePending('${escAttr(player.id)}')">Approve</button>
+      <button class="btn btn-sm danger" type="button" onclick="deletePending('${escAttr(player.id)}')">Delete</button>
+    </article>
+  `).join('');
+}
+
+async function approvePending(playerId) {
+  await db.collection('players').doc(playerId).set({
+    pending: false,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  toast('Player approved', 'success');
+}
+
+async function deletePending(playerId) {
+  if (!confirm('Delete this guest player?')) return;
+  await db.collection('players').doc(playerId).delete();
+  toast('Player deleted', 'success');
 }
 
 function starButtons(value) {
