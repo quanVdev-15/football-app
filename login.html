@@ -258,71 +258,31 @@
         >
       </div>
       <div id="namePickerList" class="vote-list" style="margin-bottom:16px;max-height:340px;overflow-y:auto"></div>
-      <button class="btn-join" id="notListedBtn" type="button" onclick="showManualForm()" style="background:#f3f4f6;color:#111">
-        Tên tôi không có trong danh sách
+      <button class="btn-join" id="notListedBtn" type="button" onclick="showGuestForm()" style="background:#f3f4f6;color:#111">
+        Tôi là người mới
       </button>
     </div>
 
-    <!-- Step 2: claim a pending (pre-rated, not-yet-logged-in) name -->
-    <div id="claimStep" hidden>
-      <p class="sheet-sub">Xác nhận số điện thoại cho <strong id="claimName">--</strong></p>
+    <!-- Step 2 (guest): enter name for brand-new players -->
+    <div id="guestStep" hidden>
       <div class="field">
-        <label for="claimPhoneInput">Số điện thoại</label>
+        <label for="guestNameInput">Tên của bạn</label>
         <input
-          id="claimPhoneInput"
-          type="tel"
-          placeholder="0912 345 678"
-          autocomplete="tel"
-          maxlength="11"
-          inputmode="numeric"
-        >
-        <p class="field-error" id="claimPhoneError">Số điện thoại chưa đúng (VD: 0912345678).</p>
-      </div>
-      <label style="display:flex;align-items:center;gap:12px;margin-bottom:20px;cursor:pointer;user-select:none">
-        <input type="checkbox" id="claimGkCheck" style="width:20px;height:20px;accent-color:#1b4332;cursor:pointer;flex-shrink:0">
-        <span style="font-size:0.95rem;font-weight:600;color:#374151">🧤 Tôi là thủ môn</span>
-      </label>
-      <button class="btn-join" id="claimBtn" type="button" onclick="confirmClaim()">Vào sân ⚽</button>
-      <button class="btn-join" type="button" onclick="backToPicker()" style="background:#f3f4f6;color:#111;margin-top:8px">
-        ‹ Quay lại
-      </button>
-    </div>
-
-    <!-- Step 3 (fallback): manual name + phone entry for brand-new players -->
-    <div id="manualStep" hidden>
-      <div class="field">
-        <label for="nameInput">Tên của bạn</label>
-        <input
-          id="nameInput"
+          id="guestNameInput"
           type="text"
           placeholder="VD: Nguyễn Văn A"
           autocomplete="name"
           maxlength="40"
         >
-        <p class="field-error" id="nameError">Nhập tên của bạn.</p>
-      </div>
-
-      <div class="field">
-        <label for="phoneInput">Số điện thoại</label>
-        <input
-          id="phoneInput"
-          type="tel"
-          placeholder="0912 345 678"
-          autocomplete="tel"
-          maxlength="11"
-          inputmode="numeric"
-        >
-        <p class="field-error" id="phoneError">Số điện thoại chưa đúng (VD: 0912345678).</p>
+        <p class="field-error" id="guestNameError">Nhập tên của bạn (ít nhất 2 ký tự).</p>
       </div>
 
       <label style="display:flex;align-items:center;gap:12px;margin-bottom:20px;cursor:pointer;user-select:none">
-        <input type="checkbox" id="gkCheck" style="width:20px;height:20px;accent-color:#1b4332;cursor:pointer;flex-shrink:0">
+        <input type="checkbox" id="guestGkCheck" style="width:20px;height:20px;accent-color:#1b4332;cursor:pointer;flex-shrink:0">
         <span style="font-size:0.95rem;font-weight:600;color:#374151">🧤 Tôi là thủ môn</span>
       </label>
 
-      <button class="btn-join" id="joinBtn" onclick="handleJoin()">
-        Vào sân ⚽
-      </button>
+      <button class="btn-join" id="guestJoinBtn" type="button" onclick="handleGuestJoin()">Vào sân ⚽</button>
       <button class="btn-join" type="button" onclick="backToPicker()" style="background:#f3f4f6;color:#111;margin-top:8px">
         ‹ Quay lại danh sách
       </button>
@@ -336,8 +296,7 @@
   <script src="/js/firebase-config.js"></script>
   <script>
     const IDENTITY_KEY = 'bdt7_player';
-    let rosterEntries = [];   // { id, name, phone, isGoalkeeper, pending, points }
-    let pendingClaim = null;  // the pending entry currently being claimed
+    let rosterEntries = [];   // { id, name, isGoalkeeper, pending, points }
 
     // Boot splash plays once (~2.15s of animation), holds briefly, then fades
     // out to reveal the login screen (already settled behind it by then).
@@ -353,7 +312,7 @@
         const saved = localStorage.getItem(IDENTITY_KEY);
         if (saved) {
           const p = JSON.parse(saved);
-          if (p.name && p.phone) window.location.replace('/index.html');
+          if (p.name && p.playerId) window.location.replace('/index.html');
         }
       } catch (_) {}
     })();
@@ -364,18 +323,13 @@
       try {
         const snap = await db.collection('players').get();
         const all = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Claimed profiles without a phone number are broken/orphaned data (e.g. old
-        // seed/test docs) — they can never pass the login identity check, so hide them.
-        const usable = all.filter(p => p.pending || (p.phone && String(p.phone).trim()));
-        const claimedNames = new Set(usable.filter(p => !p.pending).map(p => normalizeName(p.name)));
-        rosterEntries = usable
-          .filter(p => !p.pending || !claimedNames.has(normalizeName(p.name)))
+        rosterEntries = all
           .filter(p => p.name && p.name.trim())
           .sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi', { sensitivity: 'base' }));
         renderNamePicker('');
       } catch (e) {
-        console.warn('Roster load failed, falling back to manual form:', e.message);
-        showManualForm();
+        console.warn('Roster load failed, falling back to guest form:', e.message);
+        showGuestForm();
       }
     }
 
@@ -417,7 +371,7 @@
       list.innerHTML = visible.map(p => `
         <button class="vote-card" type="button" data-entry-id="${escAttr(p.id)}">
           <span class="name-row">${esc(p.name)}${p.isGoalkeeper ? '<span class="gk-badge">GK</span>' : ''}</span>
-          <span class="vote-state">${p.pending ? 'Chưa vào lần nào' : ''}</span>
+          <span class="vote-state">${p.pending ? 'Khách' : ''}</span>
         </button>
       `).join('');
 
@@ -430,152 +384,88 @@
       const entry = rosterEntries.find(p => p.id === id);
       if (!entry) return;
 
-      if (!entry.pending) {
-        // Already-claimed profile — log straight in, no extra typing needed.
-        const identity = {
-          name: entry.name,
-          phone: entry.phone || '',
-          playerId: entry.id,
-          isGoalkeeper: !!entry.isGoalkeeper,
-        };
-        localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
-        window.location.replace('/index.html');
-        return;
+      const identity = {
+        name: entry.name,
+        playerId: entry.id,
+        isGoalkeeper: !!entry.isGoalkeeper,
+      };
+      localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+
+      // If pending, claim it in Firestore (mark as no longer pending)
+      if (entry.pending) {
+        db.collection('players').doc(entry.id).set({
+          pending: false,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(() => {});
       }
 
-      // Pending (pre-rated, never logged in) — just need a phone number to finish.
-      pendingClaim = entry;
-      document.getElementById('claimName').textContent = entry.name;
-      document.getElementById('claimPhoneInput').value = '';
-      document.getElementById('claimGkCheck').checked = false;
-      document.getElementById('claimPhoneInput').classList.remove('error');
-      document.getElementById('claimPhoneError').classList.remove('show');
-      setStep('claimStep');
+      window.location.replace('/index.html');
+    }
+
+    function showGuestForm() {
+      setStep('guestStep');
     }
 
     function setStep(stepId) {
-      ['pickerStep', 'claimStep', 'manualStep'].forEach(id => {
+      ['pickerStep', 'guestStep'].forEach(id => {
         document.getElementById(id).hidden = id !== stepId;
       });
       const subText = {
         pickerStep: 'Chọn tên của bạn trong danh sách.',
-        claimStep: 'Gần xong rồi!',
-        manualStep: 'Nhập tên và số điện thoại để bắt đầu.',
+        guestStep: 'Nhập tên để tham gia buổi đá.',
       };
       document.getElementById('sheetSub').textContent = subText[stepId] || '';
     }
 
-    function showManualForm() {
-      setStep('manualStep');
-    }
-
     function backToPicker() {
-      pendingClaim = null;
       setStep('pickerStep');
     }
 
-    async function confirmClaim() {
-      if (!pendingClaim) { backToPicker(); return; }
-      const phone = cleanPhone(document.getElementById('claimPhoneInput').value);
+    async function handleGuestJoin() {
+      const name = document.getElementById('guestNameInput').value.trim();
 
-      document.getElementById('claimPhoneInput').classList.remove('error');
-      document.getElementById('claimPhoneError').classList.remove('show');
+      document.getElementById('guestNameInput').classList.remove('error');
+      document.getElementById('guestNameError').classList.remove('show');
 
-      if (!isValidPhone(phone)) {
-        document.getElementById('claimPhoneInput').classList.add('error');
-        document.getElementById('claimPhoneError').classList.add('show');
+      if (!name || name.length < 2) {
+        document.getElementById('guestNameInput').classList.add('error');
+        document.getElementById('guestNameError').classList.add('show');
         return;
       }
 
-      const btn = document.getElementById('claimBtn');
+      const btn = document.getElementById('guestJoinBtn');
       btn.disabled = true;
       btn.textContent = 'Đang lưu';
       btn.classList.add('loading');
 
-      const playerId = 'ph_' + phone;
-      const isGoalkeeper = document.getElementById('claimGkCheck').checked;
-      const name = pendingClaim.name;
+      const isGoalkeeper = document.getElementById('guestGkCheck').checked;
 
       try {
-        await db.collection('players').doc(playerId).set({
+        const docRef = await db.collection('players').add({
           name,
-          phone,
           isGoalkeeper,
-          points: pendingClaim.points,
+          pending: true,
+          points: 3,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        await db.collection('players').doc(pendingClaim.id).delete();
+        });
+
+        const identity = { name, playerId: docRef.id, isGoalkeeper };
+        localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+        window.location.replace('/index.html');
       } catch (e) {
-        console.warn('Firestore save skipped:', e.message);
+        console.warn('Firestore save failed:', e.message);
+        // Fallback: save with a generated ID
+        const fallbackId = 'guest_' + Date.now();
+        localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name, playerId: fallbackId, isGoalkeeper }));
+        window.location.replace('/index.html');
       }
-
-      localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name, phone, playerId, isGoalkeeper }));
-      window.location.replace('/index.html');
-    }
-
-    // Phone: strip spaces/dashes, validate Vietnamese format
-    function cleanPhone(raw) {
-      return raw.replace(/[\s\-().]/g, '');
-    }
-
-    function isValidPhone(phone) {
-      return /^0\d{9}$/.test(phone);
-    }
-
-    async function handleJoin() {
-      const name  = document.getElementById('nameInput').value.trim();
-      const phone = cleanPhone(document.getElementById('phoneInput').value);
-      let valid   = true;
-
-      // Clear errors
-      document.getElementById('nameInput').classList.remove('error');
-      document.getElementById('phoneInput').classList.remove('error');
-      document.getElementById('nameError').classList.remove('show');
-      document.getElementById('phoneError').classList.remove('show');
-
-      if (!name || name.length < 2) {
-        document.getElementById('nameInput').classList.add('error');
-        document.getElementById('nameError').classList.add('show');
-        valid = false;
-      }
-
-      if (!isValidPhone(phone)) {
-        document.getElementById('phoneInput').classList.add('error');
-        document.getElementById('phoneError').classList.add('show');
-        valid = false;
-      }
-
-      if (!valid) return;
-
-      const btn = document.getElementById('joinBtn');
-      btn.disabled = true;
-      btn.textContent = 'Đang lưu';
-      btn.classList.add('loading');
-
-      const playerId = 'ph_' + phone;
-      const isGoalkeeper = document.getElementById('gkCheck').checked;
-
-      try {
-        await db.collection('players').doc(playerId).set({
-          name,
-          phone,
-          isGoalkeeper,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-      } catch (e) {
-        console.warn('Firestore save skipped:', e.message);
-        // localStorage is the fallback — still proceed
-      }
-
-      localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name, phone, playerId, isGoalkeeper }));
-      window.location.replace('/index.html');
     }
 
     // Allow Enter key to submit whichever step is active
     document.addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
-      if (!document.getElementById('claimStep').hidden) confirmClaim();
-      else if (!document.getElementById('manualStep').hidden) handleJoin();
+      if (!document.getElementById('guestStep').hidden) handleGuestJoin();
     });
   </script>
 </body>

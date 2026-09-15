@@ -8,7 +8,7 @@ const DEFAULT_CAP  = 21;
     const saved = localStorage.getItem(IDENTITY_KEY);
     if (!saved) { window.location.replace('/login.html'); return; }
     const p = JSON.parse(saved);
-    if (!p.name || !p.phone) window.location.replace('/login.html');
+    if (!p.name || !p.playerId) window.location.replace('/login.html');
   } catch (_) {
     window.location.replace('/login.html');
   }
@@ -553,30 +553,24 @@ function renderTeamPlayer(player, playerIndex, isMe = false, isSub = false) {
 
 async function toggleMyRsvp() {
   const identity = currentIdentity();
-  const playerId = identity?.playerId || identity?.phone;
-  if (!session || !identity || !playerId) return;
+  const pid = identity?.playerId;
+  if (!session || !identity || !pid) return;
 
   const current = currentPlayerRsvp(identity);
   const currentlyGoing = isGoing(current);
-  const cap = getCap();
 
   if (isTeamsReady() || isLockedStatus() || (session?.status === 'full' && !currentlyGoing)) {
     toast(t('closedMsg'), 'error');
     return;
   }
 
-  if (!currentlyGoing && totalHeadcount() >= cap) {
-    toast(t('fullMsg'), 'error');
-    return;
-  }
-
-  await db.collection('sessions').doc(session.id).collection('rsvps').doc(playerId).set({
-    playerId,
+  await db.collection('sessions').doc(session.id).collection('rsvps').doc(pid).set({
+    playerId: pid,
     playerName: identity.name || '',
     phone: identity.phone || '',
     status: currentlyGoing ? 'out' : 'in',
     vote: currentlyGoing ? 'notGoing' : 'going',
-    isGoalkeeper: !!current?.isGoalkeeper,
+    isGoalkeeper: !!identity.isGoalkeeper || !!current?.isGoalkeeper,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
 
@@ -696,10 +690,13 @@ function currentIdentity() {
 function currentPlayerRsvp(identity) {
   if (!identity) return null;
   if (identity.playerId && rsvps[identity.playerId]) return rsvps[identity.playerId];
-  return Object.values(rsvps).find(rsvp => {
-    if (identity.phone && rsvp.phone && identity.phone === rsvp.phone) return true;
-    return normalizeName(playerName(rsvp)) === normalizeName(identity.name);
-  }) || null;
+  if (identity.phone) {
+    const byPhone = Object.values(rsvps).find(rsvp => rsvp.phone && identity.phone === rsvp.phone);
+    if (byPhone) return byPhone;
+  }
+  return Object.values(rsvps).find(rsvp =>
+    normalizeName(playerName(rsvp)) === normalizeName(identity.name)
+  ) || null;
 }
 
 function isCurrentPlayer(player, identity) {
