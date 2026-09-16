@@ -467,8 +467,14 @@ button {
 }
 
 .going-list {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr;
   gap: 5px;
+}
+
+@media (min-width: 480px) {
+  .going-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .name-chip {
@@ -2589,12 +2595,6 @@ button {
 @media (min-width: 560px) {
   .button-row {
     grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 380px) {
-  .going-list {
-    grid-template-columns: 1fr; /* already 1-col, kept for specificity */
   }
 }
 
