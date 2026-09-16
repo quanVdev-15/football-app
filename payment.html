@@ -103,7 +103,7 @@
       const saved = localStorage.getItem(IDENTITY_KEY);
       if (!saved) { window.location.replace('/login.html'); return; }
       const data = JSON.parse(saved);
-      if (!data.name || !data.phone) window.location.replace('/login.html');
+      if (!data.name || !data.playerId) window.location.replace('/login.html');
     } catch (_) {
       window.location.replace('/login.html');
     }
@@ -113,7 +113,7 @@
 
   async function init() {
     identity = currentIdentity();
-    playerId = identity.playerId || identity.phone;
+    playerId = identity.playerId;
 
     try {
       session = await getActiveSession();

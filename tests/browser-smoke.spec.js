@@ -157,21 +157,18 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('login validates required player fields', async ({ page }) => {
+test('login shows name picker by default', async ({ page }) => {
   await page.goto(`${baseURL}/login.html`);
-  await page.locator('#joinBtn').click();
-  await expect(page.locator('#nameError')).toBeVisible();
-  await expect(page.locator('#phoneError')).toBeVisible();
+  await expect(page.locator('#pickerStep')).toBeVisible();
+  await expect(page.locator('#guestStep')).toBeHidden();
 });
 
-test('login saves identity and redirects to home', async ({ page }) => {
+test('login guest flow validates name before joining', async ({ page }) => {
   await page.goto(`${baseURL}/login.html`);
-  await page.locator('#nameInput').fill('Nguyen Minh Quan');
-  await page.locator('#phoneInput').fill('0912345678');
-  await page.locator('#joinBtn').click();
-  await page.waitForURL('**/index.html');
-  const identity = await page.evaluate(() => JSON.parse(localStorage.getItem('bdt7_player')));
-  expect(identity).toMatchObject({ name: 'Nguyen Minh Quan', phone: '0912345678', playerId: 'ph_0912345678' });
+  await page.locator('#notListedBtn').click();
+  await expect(page.locator('#guestStep')).toBeVisible();
+  await page.locator('#guestJoinBtn').click();
+  await expect(page.locator('#guestNameError')).toBeVisible();
 });
 
 test('home redirects anonymous players to login', async ({ page }) => {
@@ -182,7 +179,7 @@ test('home redirects anonymous players to login', async ({ page }) => {
 test('home authenticated empty session renders empty state', async ({ page }) => {
   await page.goto(`${baseURL}/login.html`);
   await page.evaluate(() => {
-    localStorage.setItem('bdt7_player', JSON.stringify({ name: 'An', phone: '0912345678', playerId: 'ph_0912345678' }));
+    localStorage.setItem('bdt7_player', JSON.stringify({ name: 'An', playerId: 'player_abc123' }));
   });
   await page.goto(`${baseURL}/index.html`);
   await expect(page.locator('#emptyState')).toBeVisible();
