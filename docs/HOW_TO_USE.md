@@ -60,7 +60,7 @@ turned back on later.
 
 ## Player guide
 
-1. Open the site, log in with **name + phone number** (check the goalkeeper
+1. Open the site, **tap your name** to log in (check the goalkeeper
    box if that's you).
 2. When a poll is open, tap to **join** — you'll show up in the admin's
    "Going" list right away.

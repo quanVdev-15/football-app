@@ -661,7 +661,7 @@ function statusLabel() {
   if (isLockedStatus()) return { label: t('locked'), className: 'is-locked' };
   if (isFullStatus()) {
     const subsCount = Math.max(0, goingPlayers().length - getCap());
-    const label = subsCount > 0 ? `${t('full')} +${subsCount} subs` : t('full');
+    const label = subsCount > 0 ? `${t('full')} +${subsCount} ${t('subs').toLowerCase()}` : t('full');
     return { label, className: 'is-full' };
   }
   return { label: t('open'), className: 'is-open' };

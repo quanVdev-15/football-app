@@ -345,17 +345,25 @@ function renderPendingPlayers() {
 }
 
 async function approvePending(playerId) {
-  await db.collection('players').doc(playerId).set({
-    pending: false,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-  toast('Player approved', 'success');
+  try {
+    await db.collection('players').doc(playerId).set({
+      pending: false,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    toast('Player approved', 'success');
+  } catch (e) {
+    toast('Failed to approve player', 'error');
+  }
 }
 
 async function deletePending(playerId) {
   if (!confirm('Delete this guest player?')) return;
-  await db.collection('players').doc(playerId).delete();
-  toast('Player deleted', 'success');
+  try {
+    await db.collection('players').doc(playerId).delete();
+    toast('Player deleted', 'success');
+  } catch (e) {
+    toast('Failed to delete player', 'error');
+  }
 }
 
 function starButtons(value) {
